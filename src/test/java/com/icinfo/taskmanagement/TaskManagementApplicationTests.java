@@ -269,7 +269,125 @@ class TaskManagementApplicationTests {
                         .header("Authorization", "Bearer " + mentorToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.length()").value(2));
+                .andExpect(jsonPath("$.data.total").value(2))
+                .andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.size").value(10))
+                .andExpect(jsonPath("$.data.records.length()").value(2));
+    }
+
+    @Test
+    void mentorCanFilterTasksBySingleConditions() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long otherInternId = userId("intern_other");
+        Long inProgressTaskId = createTaskRow(
+                "Alpha launch",
+                "Needs launch checklist",
+                "IN_PROGRESS",
+                internId,
+                mentorId,
+                "2026-07-08");
+        createTaskRow(
+                "Beta review",
+                "Contains unique description token",
+                "TODO",
+                otherInternId,
+                mentorId,
+                "2026-07-09");
+
+        mockMvc.perform(get("/api/tasks")
+                        .param("status", "IN_PROGRESS")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.records[0].id").value(inProgressTaskId));
+
+        mockMvc.perform(get("/api/tasks")
+                        .param("assigneeId", otherInternId.toString())
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.records[0].assigneeId").value(otherInternId));
+
+        mockMvc.perform(get("/api/tasks")
+                        .param("dueDateStart", "2026-07-09")
+                        .param("dueDateEnd", "2026-07-09")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.records[0].title").value("Beta review"));
+
+        mockMvc.perform(get("/api/tasks")
+                        .param("keyword", "unique description")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.records[0].title").value("Beta review"));
+    }
+
+    @Test
+    void mentorCanCombineFiltersAndPageResults() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long otherInternId = userId("intern_other");
+        createTaskRow(
+                "Weekly search report 1",
+                "filterable report",
+                "TODO",
+                internId,
+                mentorId,
+                "2026-07-10");
+        Long secondTaskId = createTaskRow(
+                "Weekly search report 2",
+                "filterable report",
+                "TODO",
+                internId,
+                mentorId,
+                "2026-07-11");
+        createTaskRow(
+                "Weekly search report 3",
+                "filterable report",
+                "TODO",
+                internId,
+                mentorId,
+                "2026-07-12");
+        createTaskRow(
+                "Weekly search report done",
+                "filterable report",
+                "DONE",
+                internId,
+                mentorId,
+                "2026-07-11");
+        createTaskRow(
+                "Other assignee search report",
+                "filterable report",
+                "TODO",
+                otherInternId,
+                mentorId,
+                "2026-07-11");
+
+        mockMvc.perform(get("/api/tasks")
+                        .param("status", "TODO")
+                        .param("assigneeId", internId.toString())
+                        .param("dueDateStart", "2026-07-10")
+                        .param("dueDateEnd", "2026-07-12")
+                        .param("keyword", "search report")
+                        .param("page", "2")
+                        .param("size", "1")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.total").value(3))
+                .andExpect(jsonPath("$.data.page").value(2))
+                .andExpect(jsonPath("$.data.size").value(1))
+                .andExpect(jsonPath("$.data.records.length()").value(1))
+                .andExpect(jsonPath("$.data.records[0].id").value(secondTaskId));
     }
 
     @Test
@@ -285,8 +403,9 @@ class TaskManagementApplicationTests {
                         .header("Authorization", "Bearer " + internToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].id").value(ownTaskId));
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.records.length()").value(1))
+                .andExpect(jsonPath("$.data.records[0].id").value(ownTaskId));
 
         mockMvc.perform(put("/api/tasks/{id}", ownTaskId)
                         .header("Authorization", "Bearer " + internToken)
@@ -339,6 +458,46 @@ class TaskManagementApplicationTests {
                 .andExpect(jsonPath("$.code").value(403));
     }
 
+    @Test
+    void internFilterCannotEscapeAssignedTaskScope() throws Exception {
+        String internToken = loginAndExtractToken("intern_mock", "intern123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long otherInternId = userId("intern_other");
+        Long ownTaskId = createTaskRow(
+                "Own filtered task",
+                "owned boundary keyword",
+                "TODO",
+                internId,
+                mentorId,
+                "2026-07-15");
+        createTaskRow(
+                "Other filtered task",
+                "owned boundary keyword",
+                "TODO",
+                otherInternId,
+                mentorId,
+                "2026-07-15");
+
+        mockMvc.perform(get("/api/tasks")
+                        .param("assigneeId", otherInternId.toString())
+                        .param("keyword", "boundary keyword")
+                        .header("Authorization", "Bearer " + internToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.total").value(0))
+                .andExpect(jsonPath("$.data.records.length()").value(0));
+
+        mockMvc.perform(get("/api/tasks")
+                        .param("assigneeId", internId.toString())
+                        .param("keyword", "boundary keyword")
+                        .header("Authorization", "Bearer " + internToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.records[0].id").value(ownTaskId));
+    }
+
     private String loginAndExtractToken(String username, String password) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -362,17 +521,34 @@ class TaskManagementApplicationTests {
     }
 
     private Long createTaskRow(String title, Long assigneeId, Long creatorId) {
+        return createTaskRow(
+                title,
+                title + " description",
+                "TODO",
+                assigneeId,
+                creatorId,
+                "2026-07-01");
+    }
+
+    private Long createTaskRow(
+            String title,
+            String description,
+            String status,
+            Long assigneeId,
+            Long creatorId,
+            String dueDate
+    ) {
         jdbcTemplate.update("""
                 INSERT INTO tasks (title, description, status, priority, assignee_id, creator_id, due_date)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 title,
-                title + " description",
-                "TODO",
+                description,
+                status,
                 "MEDIUM",
                 assigneeId,
                 creatorId,
-                "2026-07-01");
+                dueDate);
         return jdbcTemplate.queryForObject("SELECT id FROM tasks WHERE title = ?", Long.class, title);
     }
 

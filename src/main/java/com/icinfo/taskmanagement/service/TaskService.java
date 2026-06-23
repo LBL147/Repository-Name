@@ -1,9 +1,13 @@
 package com.icinfo.taskmanagement.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.icinfo.taskmanagement.common.ErrorCode;
+import com.icinfo.taskmanagement.common.PageResponse;
 import com.icinfo.taskmanagement.dto.CreateTaskRequest;
 import com.icinfo.taskmanagement.dto.TaskListItemResponse;
+import com.icinfo.taskmanagement.dto.TaskQueryRequest;
 import com.icinfo.taskmanagement.dto.TaskResponse;
 import com.icinfo.taskmanagement.dto.UpdateTaskRequest;
 import com.icinfo.taskmanagement.entity.Task;
@@ -33,17 +37,16 @@ public class TaskService {
         this.userMapper = userMapper;
     }
 
-    public List<TaskListItemResponse> listTasks() {
+    public PageResponse<TaskListItemResponse> listTasks(TaskQueryRequest request) {
         CurrentUser currentUser = CurrentUserContext.get();
-        LambdaQueryWrapper<Task> wrapper = new LambdaQueryWrapper<Task>()
-                .orderByDesc(Task::getCreatedAt)
-                .orderByDesc(Task::getId);
-        if (!isMentor(currentUser)) {
-            wrapper.eq(Task::getAssigneeId, currentUser.getId());
-        }
-        return taskMapper.selectList(wrapper).stream()
+        LambdaQueryWrapper<Task> wrapper = buildVisibleTaskQuery(currentUser, request);
+        long pageNumber = normalizePage(request.getPage());
+        long pageSize = normalizeSize(request.getSize());
+        IPage<Task> taskPage = taskMapper.selectPage(new Page<>(pageNumber, pageSize), wrapper);
+        List<TaskListItemResponse> records = taskPage.getRecords().stream()
                 .map(TaskListItemResponse::from)
                 .toList();
+        return new PageResponse<>(records, taskPage.getTotal(), pageNumber, pageSize);
     }
 
     @Transactional
@@ -112,6 +115,57 @@ public class TaskService {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
         return task;
+    }
+
+    private LambdaQueryWrapper<Task> buildVisibleTaskQuery(CurrentUser currentUser, TaskQueryRequest request) {
+        LambdaQueryWrapper<Task> wrapper = new LambdaQueryWrapper<>();
+        if (!isMentor(currentUser)) {
+            wrapper.eq(Task::getAssigneeId, currentUser.getId());
+        }
+        if (request.getStatus() != null) {
+            wrapper.eq(Task::getStatus, request.getStatus());
+        }
+        if (request.getAssigneeId() != null) {
+            wrapper.eq(Task::getAssigneeId, request.getAssigneeId());
+        }
+        if (request.getDueDateStart() != null) {
+            wrapper.ge(Task::getDueDate, request.getDueDateStart());
+        }
+        if (request.getDueDateEnd() != null) {
+            wrapper.le(Task::getDueDate, request.getDueDateEnd());
+        }
+        String keyword = normalizeKeyword(request.getKeyword());
+        if (keyword != null) {
+            wrapper.and(keywordWrapper -> keywordWrapper
+                    .like(Task::getTitle, keyword)
+                    .or()
+                    .like(Task::getDescription, keyword));
+        }
+        return wrapper
+                .orderByDesc(Task::getCreatedAt)
+                .orderByDesc(Task::getId);
+    }
+
+    private String normalizeKeyword(String keyword) {
+        if (keyword == null) {
+            return null;
+        }
+        String trimmed = keyword.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private long normalizePage(Long page) {
+        if (page == null || page < 1) {
+            return 1L;
+        }
+        return page;
+    }
+
+    private long normalizeSize(Long size) {
+        if (size == null || size < 1) {
+            return 10L;
+        }
+        return Math.min(size, 100L);
     }
 
     private void validateUserExists(Long userId, String message) {

@@ -1,13 +1,14 @@
 package com.icinfo.taskmanagement.controller;
 
 import com.icinfo.taskmanagement.common.ApiResponse;
+import com.icinfo.taskmanagement.common.PageResponse;
 import com.icinfo.taskmanagement.dto.CreateTaskRequest;
 import com.icinfo.taskmanagement.dto.TaskListItemResponse;
+import com.icinfo.taskmanagement.dto.TaskQueryRequest;
 import com.icinfo.taskmanagement.dto.TaskResponse;
 import com.icinfo.taskmanagement.dto.UpdateTaskRequest;
 import com.icinfo.taskmanagement.service.TaskService;
 import jakarta.validation.Valid;
-import java.util.List;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,8 +29,8 @@ public class TaskController {
     }
 
     @GetMapping
-    public ApiResponse<List<TaskListItemResponse>> listTasks() {
-        return ApiResponse.success(taskService.listTasks());
+    public ApiResponse<PageResponse<TaskListItemResponse>> listTasks(TaskQueryRequest request) {
+        return ApiResponse.success(taskService.listTasks(request));
     }
 
     @PostMapping
