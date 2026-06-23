@@ -11,12 +11,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.alibaba.excel.EasyExcel;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.icinfo.taskmanagement.dto.TaskExportRow;
 import com.icinfo.taskmanagement.service.news.ExternalNewsItem;
 import com.icinfo.taskmanagement.service.news.NewsFetchException;
 import com.icinfo.taskmanagement.service.news.NewsFetchResult;
 import com.icinfo.taskmanagement.service.news.NewsFetcher;
+import java.io.ByteArrayInputStream;
 import java.sql.Connection;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -28,6 +31,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
@@ -671,6 +675,114 @@ class TaskManagementApplicationTests {
     }
 
     @Test
+    void mentorCanExportFilteredTasksWithDownloadHeaders() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long otherInternId = userId("intern_other");
+        createTaskRow(
+                "Export matching task",
+                "contains export keyword",
+                "TODO",
+                internId,
+                mentorId,
+                "2026-07-20");
+        createTaskRow(
+                "Export wrong status",
+                "contains export keyword",
+                "DONE",
+                internId,
+                mentorId,
+                "2026-07-20");
+        createTaskRow(
+                "Export wrong assignee",
+                "contains export keyword",
+                "TODO",
+                otherInternId,
+                mentorId,
+                "2026-07-20");
+
+        MvcResult result = mockMvc.perform(get("/api/tasks/export")
+                        .param("status", "TODO")
+                        .param("assigneeId", internId.toString())
+                        .param("dueDateStart", "2026-07-20")
+                        .param("dueDateEnd", "2026-07-20")
+                        .param("keyword", "export keyword")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertExcelDownloadHeaders(result);
+        List<TaskExportRow> rows = readTaskExportRows(result);
+        assertThat(rows).hasSize(1);
+        TaskExportRow row = rows.get(0);
+        assertThat(row.getTitle()).isEqualTo("Export matching task");
+        assertThat(row.getDescription()).isEqualTo("contains export keyword");
+        assertThat(row.getStatus()).isEqualTo("TODO");
+        assertThat(row.getPriority()).isEqualTo("MEDIUM");
+        assertThat(row.getAssignee()).isEqualTo("Mock Intern");
+        assertThat(row.getCreator()).isEqualTo("Mock Mentor");
+        assertThat(row.getDueDate()).isEqualTo("2026-07-20");
+    }
+
+    @Test
+    void mentorCanExportAllVisibleTasks() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long otherInternId = userId("intern_other");
+        createTaskRow("Mentor export intern task", internId, mentorId);
+        createTaskRow("Mentor export other task", otherInternId, mentorId);
+
+        MvcResult result = mockMvc.perform(get("/api/tasks/export")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertThat(exportTitles(result))
+                .containsExactlyInAnyOrder("Mentor export intern task", "Mentor export other task");
+    }
+
+    @Test
+    void internExportCannotIncludeUnauthorizedTasks() throws Exception {
+        String internToken = loginAndExtractToken("intern_mock", "intern123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long otherInternId = userId("intern_other");
+        createTaskRow(
+                "Intern export own task",
+                "shared export boundary",
+                "TODO",
+                internId,
+                mentorId,
+                "2026-07-21");
+        createTaskRow(
+                "Intern export unauthorized task",
+                "shared export boundary",
+                "TODO",
+                otherInternId,
+                mentorId,
+                "2026-07-21");
+
+        MvcResult ownScopeResult = mockMvc.perform(get("/api/tasks/export")
+                        .param("keyword", "export boundary")
+                        .header("Authorization", "Bearer " + internToken))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertThat(exportTitles(ownScopeResult)).containsExactly("Intern export own task");
+
+        MvcResult escapeAttemptResult = mockMvc.perform(get("/api/tasks/export")
+                        .param("assigneeId", otherInternId.toString())
+                        .param("keyword", "export boundary")
+                        .header("Authorization", "Bearer " + internToken))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertThat(readTaskExportRows(escapeAttemptResult)).isEmpty();
+    }
+
+    @Test
     void mentorCanUpdateTaskStatusFromTodoToInProgress() throws Exception {
         String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
         Long mentorId = userId("mentor_mock");
@@ -1095,6 +1207,31 @@ class TaskManagementApplicationTests {
                         .content("{}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(403));
+    }
+
+    private void assertExcelDownloadHeaders(MvcResult result) {
+        assertThat(result.getResponse().getContentType())
+                .contains("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        assertThat(result.getResponse().getHeader(HttpHeaders.CONTENT_DISPOSITION))
+                .contains("attachment")
+                .contains("tasks-export.xlsx");
+        byte[] content = result.getResponse().getContentAsByteArray();
+        assertThat(content).isNotEmpty();
+        assertThat(content[0]).isEqualTo((byte) 'P');
+        assertThat(content[1]).isEqualTo((byte) 'K');
+    }
+
+    private List<String> exportTitles(MvcResult result) {
+        return readTaskExportRows(result).stream()
+                .map(TaskExportRow::getTitle)
+                .toList();
+    }
+
+    private List<TaskExportRow> readTaskExportRows(MvcResult result) {
+        return EasyExcel.read(new ByteArrayInputStream(result.getResponse().getContentAsByteArray()))
+                .head(TaskExportRow.class)
+                .sheet()
+                .doReadSync();
     }
 
     private String loginAndExtractToken(String username, String password) throws Exception {

@@ -56,6 +56,12 @@ public class TaskService {
         return new PageResponse<>(records, taskPage.getTotal(), pageNumber, pageSize);
     }
 
+    public List<Task> listVisibleTaskEntities(TaskQueryRequest request) {
+        CurrentUser currentUser = CurrentUserContext.get();
+        LambdaQueryWrapper<Task> wrapper = buildVisibleTaskQuery(currentUser, request);
+        return taskMapper.selectList(wrapper);
+    }
+
     @Transactional
     public TaskResponse createTask(CreateTaskRequest request) {
         CurrentUser currentUser = CurrentUserContext.get();

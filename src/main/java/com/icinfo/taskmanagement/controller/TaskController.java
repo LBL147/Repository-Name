@@ -11,9 +11,12 @@ import com.icinfo.taskmanagement.dto.TaskQueryRequest;
 import com.icinfo.taskmanagement.dto.TaskResponse;
 import com.icinfo.taskmanagement.dto.UpdateTaskStatusRequest;
 import com.icinfo.taskmanagement.dto.UpdateTaskRequest;
+import com.icinfo.taskmanagement.service.TaskExportService;
 import com.icinfo.taskmanagement.service.TaskNewsService;
 import com.icinfo.taskmanagement.service.TaskService;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.io.IOException;
 import java.util.List;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,16 +34,28 @@ public class TaskController {
 
     private final TaskService taskService;
 
+    private final TaskExportService taskExportService;
+
     private final TaskNewsService taskNewsService;
 
-    public TaskController(TaskService taskService, TaskNewsService taskNewsService) {
+    public TaskController(
+            TaskService taskService,
+            TaskExportService taskExportService,
+            TaskNewsService taskNewsService
+    ) {
         this.taskService = taskService;
+        this.taskExportService = taskExportService;
         this.taskNewsService = taskNewsService;
     }
 
     @GetMapping
     public ApiResponse<PageResponse<TaskListItemResponse>> listTasks(TaskQueryRequest request) {
         return ApiResponse.success(taskService.listTasks(request));
+    }
+
+    @GetMapping("/export")
+    public void exportTasks(TaskQueryRequest request, HttpServletResponse response) throws IOException {
+        taskExportService.exportTasks(request, response);
     }
 
     @PostMapping
