@@ -7,7 +7,10 @@
 ```sql
 SOURCE sql/00-create-database.sql;
 SOURCE sql/01-auth-users.sql;
+SOURCE sql/02-task-tasks.sql;
 ```
+
+Execution order: run `00-create-database.sql` first, then `01-auth-users.sql`, then `02-task-tasks.sql`.
 
 也可以直接复制 `00-create-database.sql` 内容到 MySQL 客户端执行。
 

@@ -1,8 +1,10 @@
 package com.icinfo.taskmanagement;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -38,7 +40,7 @@ class TaskManagementApplicationTests {
     private ObjectMapper objectMapper;
 
     @BeforeEach
-    void setUpUsersTable() {
+    void setUpDatabase() {
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     id BIGINT NOT NULL AUTO_INCREMENT,
@@ -54,7 +56,7 @@ class TaskManagementApplicationTests {
                 """);
         jdbcTemplate.update("""
                 INSERT INTO users (username, password, display_name, role)
-                VALUES (?, ?, ?, ?), (?, ?, ?, ?)
+                VALUES (?, ?, ?, ?), (?, ?, ?, ?), (?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
                     password = VALUES(password),
                     display_name = VALUES(display_name),
@@ -67,7 +69,31 @@ class TaskManagementApplicationTests {
                 "intern_mock",
                 "534d9b45e4168ad5e7ab39ddde0387982ec6a2a18b992f62738b23fcde72f7e7",
                 "Mock Intern",
+                "INTERN",
+                "intern_other",
+                "534d9b45e4168ad5e7ab39ddde0387982ec6a2a18b992f62738b23fcde72f7e7",
+                "Other Intern",
                 "INTERN");
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS tasks (
+                    id BIGINT NOT NULL AUTO_INCREMENT,
+                    title VARCHAR(128) NOT NULL,
+                    description TEXT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT 'TODO',
+                    priority VARCHAR(32) NOT NULL DEFAULT 'MEDIUM',
+                    assignee_id BIGINT NOT NULL,
+                    creator_id BIGINT NOT NULL,
+                    due_date DATE NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    KEY idx_tasks_status (status),
+                    KEY idx_tasks_assignee_id (assignee_id),
+                    KEY idx_tasks_creator_id (creator_id),
+                    KEY idx_tasks_due_date (due_date)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+        jdbcTemplate.update("DELETE FROM tasks");
     }
 
     @Test
@@ -168,6 +194,151 @@ class TaskManagementApplicationTests {
                 .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"));
     }
 
+    @Test
+    void mentorCanCreateReadUpdateAndDeleteTask() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+        Long internId = userId("intern_mock");
+
+        MvcResult createResult = mockMvc.perform(post("/api/tasks")
+                        .header("Authorization", "Bearer " + mentorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Prepare weekly report",
+                                  "description": "Collect this week's updates",
+                                  "assigneeId": %d,
+                                  "dueDate": "2026-07-01"
+                                }
+                                """.formatted(internId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.title").value("Prepare weekly report"))
+                .andExpect(jsonPath("$.data.status").value("TODO"))
+                .andExpect(jsonPath("$.data.priority").value("MEDIUM"))
+                .andExpect(jsonPath("$.data.assigneeId").value(internId))
+                .andReturn();
+        Long taskId = responseDataId(createResult);
+
+        mockMvc.perform(get("/api/tasks/{id}", taskId)
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.id").value(taskId))
+                .andExpect(jsonPath("$.data.creatorId").value(userId("mentor_mock")));
+
+        mockMvc.perform(put("/api/tasks/{id}", taskId)
+                        .header("Authorization", "Bearer " + mentorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Prepare final report",
+                                  "description": "Collect complete updates",
+                                  "status": "IN_PROGRESS",
+                                  "priority": "HIGH",
+                                  "assigneeId": %d,
+                                  "dueDate": "2026-07-02"
+                                }
+                                """.formatted(internId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.title").value("Prepare final report"))
+                .andExpect(jsonPath("$.data.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.data.priority").value("HIGH"));
+
+        mockMvc.perform(delete("/api/tasks/{id}", taskId)
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(get("/api/tasks/{id}", taskId)
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(404));
+    }
+
+    @Test
+    void mentorCanListAllTasks() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long otherInternId = userId("intern_other");
+        createTaskRow("Assigned to mock intern", internId, mentorId);
+        createTaskRow("Assigned to other intern", otherInternId, mentorId);
+
+        mockMvc.perform(get("/api/tasks")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.length()").value(2));
+    }
+
+    @Test
+    void internCanOnlyListAndMaintainAssignedTasks() throws Exception {
+        String internToken = loginAndExtractToken("intern_mock", "intern123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long otherInternId = userId("intern_other");
+        Long ownTaskId = createTaskRow("Own assigned task", internId, mentorId);
+        createTaskRow("Other assigned task", otherInternId, mentorId);
+
+        mockMvc.perform(get("/api/tasks")
+                        .header("Authorization", "Bearer " + internToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].id").value(ownTaskId));
+
+        mockMvc.perform(put("/api/tasks/{id}", ownTaskId)
+                        .header("Authorization", "Bearer " + internToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Own assigned task updated",
+                                  "description": "Updated by owner",
+                                  "status": "DONE",
+                                  "priority": "LOW",
+                                  "assigneeId": %d,
+                                  "dueDate": "2026-07-03"
+                                }
+                                """.formatted(internId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("DONE"))
+                .andExpect(jsonPath("$.data.assigneeId").value(internId));
+    }
+
+    @Test
+    void internCannotAccessOthersTasksOrDeleteTasks() throws Exception {
+        String internToken = loginAndExtractToken("intern_mock", "intern123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long otherInternId = userId("intern_other");
+        Long ownTaskId = createTaskRow("Own task", internId, mentorId);
+        Long otherTaskId = createTaskRow("Other task", otherInternId, mentorId);
+
+        mockMvc.perform(get("/api/tasks/{id}", otherTaskId)
+                        .header("Authorization", "Bearer " + internToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(403));
+
+        mockMvc.perform(delete("/api/tasks/{id}", ownTaskId)
+                        .header("Authorization", "Bearer " + internToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(403));
+
+        mockMvc.perform(post("/api/tasks")
+                        .header("Authorization", "Bearer " + internToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Intern create attempt",
+                                  "assigneeId": %d
+                                }
+                                """.formatted(internId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(403));
+    }
+
     private String loginAndExtractToken(String username, String password) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -181,5 +352,32 @@ class TaskManagementApplicationTests {
                 .andReturn();
         JsonNode root = objectMapper.readTree(result.getResponse().getContentAsByteArray());
         return root.path("data").path("token").asText();
+    }
+
+    private Long userId(String username) {
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM users WHERE username = ?",
+                Long.class,
+                username);
+    }
+
+    private Long createTaskRow(String title, Long assigneeId, Long creatorId) {
+        jdbcTemplate.update("""
+                INSERT INTO tasks (title, description, status, priority, assignee_id, creator_id, due_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                title,
+                title + " description",
+                "TODO",
+                "MEDIUM",
+                assigneeId,
+                creatorId,
+                "2026-07-01");
+        return jdbcTemplate.queryForObject("SELECT id FROM tasks WHERE title = ?", Long.class, title);
+    }
+
+    private Long responseDataId(MvcResult result) throws Exception {
+        JsonNode root = objectMapper.readTree(result.getResponse().getContentAsByteArray());
+        return root.path("data").path("id").asLong();
     }
 }

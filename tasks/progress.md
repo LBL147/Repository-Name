@@ -3,7 +3,7 @@
 ## 模块完成情况
 
 - [x] [用户认证](./auth.md)
-- [ ] [任务管理](./task-management.md)
+- [x] [任务管理](./task-management.md)
 - [ ] [状态流转](./status-flow.md)
 - [ ] [筛选搜索](./filter-search.md)
 - [ ] [实时资讯](./news.md)
