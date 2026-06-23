@@ -7,7 +7,7 @@
 - [x] [状态流转](./status-flow.md)
 - [x] [筛选搜索](./filter-search.md)
 - [x] [实时资讯](./news.md)（后端搜索、刷新、缓存已完成；前端展示项未纳入本次范围）
-- [ ] [资讯关联](./task-news.md)
+- [x] [资讯关联](./task-news.md)（后端关联查询、刷新、去重、权限校验已完成；前端展示项未纳入本次范围）
 - [ ] [仪表盘](./dashboard.md)
 - [ ] [Excel 导出](./excel-export.md)
 

@@ -122,6 +122,19 @@ class TaskManagementApplicationTests {
                     KEY idx_news_items_fetched_at (fetched_at)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS task_news (
+                    id BIGINT NOT NULL AUTO_INCREMENT,
+                    task_id BIGINT NOT NULL,
+                    news_id BIGINT NOT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    UNIQUE KEY uk_task_news_task_id_news_id (task_id, news_id),
+                    KEY idx_task_news_task_id (task_id),
+                    KEY idx_task_news_news_id (news_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+        jdbcTemplate.update("DELETE FROM task_news");
         jdbcTemplate.update("DELETE FROM news_items");
         jdbcTemplate.update("DELETE FROM tasks");
     }
@@ -789,6 +802,172 @@ class TaskManagementApplicationTests {
                 .andExpect(jsonPath("$.message").value("外部资讯暂时不可用，请稍后重试"));
     }
 
+    @Test
+    void listTaskNewsReturnsAssociatedNewsForVisibleTask() throws Exception {
+        String internToken = loginAndExtractToken("intern_mock", "intern123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long taskId = createTaskRow("Task with associated news", internId, mentorId);
+        Long newsId = createNewsRow(
+                "Associated task news",
+                "https://example.com/task-associated-news",
+                "Example News",
+                "Task",
+                "2026-06-21 10:00:00");
+        createTaskNewsRow(taskId, newsId);
+
+        mockMvc.perform(get("/api/tasks/{id}/news", taskId)
+                        .header("Authorization", "Bearer " + internToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].newsId").value(newsId))
+                .andExpect(jsonPath("$.data[0].title").value("Associated task news"))
+                .andExpect(jsonPath("$.data[0].associatedAt").isNotEmpty());
+    }
+
+    @Test
+    void refreshTaskNewsUsesTaskTitleWhenKeywordIsMissing() throws Exception {
+        String internToken = loginAndExtractToken("intern_mock", "intern123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long taskId = createTaskRow("Supply chain risk", internId, mentorId);
+        when(newsFetcher.fetch("Supply chain risk")).thenReturn(new NewsFetchResult(
+                "GDELT DOC API",
+                List.of(new ExternalNewsItem(
+                        "Supply chain risk update",
+                        "https://example.com/supply-chain-risk",
+                        "Example News",
+                        LocalDateTime.of(2026, 6, 21, 10, 0)))));
+
+        mockMvc.perform(post("/api/tasks/{id}/news/refresh", taskId)
+                        .header("Authorization", "Bearer " + internToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.keyword").value("Supply chain risk"))
+                .andExpect(jsonPath("$.data.refreshSucceeded").value(true))
+                .andExpect(jsonPath("$.data.fetchedCount").value(1))
+                .andExpect(jsonPath("$.data.insertedCount").value(1))
+                .andExpect(jsonPath("$.data.associatedCount").value(1))
+                .andExpect(jsonPath("$.data.records.length()").value(1))
+                .andExpect(jsonPath("$.data.records[0].title").value("Supply chain risk update"));
+
+        assertThat(taskNewsCount(taskId)).isEqualTo(1L);
+    }
+
+    @Test
+    void refreshTaskNewsPrefersManualKeyword() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long taskId = createTaskRow("Task title keyword", internId, mentorId);
+        when(newsFetcher.fetch("manual cloud")).thenReturn(new NewsFetchResult(
+                "GDELT DOC API",
+                List.of(new ExternalNewsItem(
+                        "Manual cloud match",
+                        "https://example.com/manual-cloud",
+                        "Cloud Daily",
+                        LocalDateTime.of(2026, 6, 22, 10, 0)))));
+
+        mockMvc.perform(post("/api/tasks/{id}/news/refresh", taskId)
+                        .header("Authorization", "Bearer " + mentorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "keyword": " manual cloud "
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.keyword").value("manual cloud"))
+                .andExpect(jsonPath("$.data.records.length()").value(1))
+                .andExpect(jsonPath("$.data.records[0].keyword").value("manual cloud"));
+
+        assertThat(taskNewsCount(taskId)).isEqualTo(1L);
+    }
+
+    @Test
+    void refreshTaskNewsDeduplicatesRepeatedAssociations() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long taskId = createTaskRow("Deduplicate task news", internId, mentorId);
+        when(newsFetcher.fetch("Deduplicate task news")).thenReturn(new NewsFetchResult(
+                "GDELT DOC API",
+                List.of(new ExternalNewsItem(
+                        "Deduplicate update",
+                        "https://example.com/deduplicate-update",
+                        "Example News",
+                        LocalDateTime.of(2026, 6, 23, 10, 0)))));
+
+        mockMvc.perform(post("/api/tasks/{id}/news/refresh", taskId)
+                        .header("Authorization", "Bearer " + mentorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.associatedCount").value(1));
+
+        mockMvc.perform(post("/api/tasks/{id}/news/refresh", taskId)
+                        .header("Authorization", "Bearer " + mentorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.insertedCount").value(0))
+                .andExpect(jsonPath("$.data.associatedCount").value(0))
+                .andExpect(jsonPath("$.data.records.length()").value(1));
+
+        assertThat(taskNewsCount(taskId)).isEqualTo(1L);
+    }
+
+    @Test
+    void failedTaskNewsRefreshDoesNotBlockTaskDetails() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long taskId = createTaskRow("Refresh failure task", internId, mentorId);
+        when(newsFetcher.fetch("Refresh failure task")).thenThrow(new NewsFetchException("down"));
+
+        mockMvc.perform(post("/api/tasks/{id}/news/refresh", taskId)
+                        .header("Authorization", "Bearer " + mentorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.refreshSucceeded").value(false))
+                .andExpect(jsonPath("$.data.records.length()").value(0));
+
+        mockMvc.perform(get("/api/tasks/{id}", taskId)
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.id").value(taskId))
+                .andExpect(jsonPath("$.data.title").value("Refresh failure task"));
+    }
+
+    @Test
+    void taskNewsEndpointsRejectInvisibleTask() throws Exception {
+        String internToken = loginAndExtractToken("intern_mock", "intern123");
+        Long mentorId = userId("mentor_mock");
+        Long otherInternId = userId("intern_other");
+        Long otherTaskId = createTaskRow("Invisible task news", otherInternId, mentorId);
+
+        mockMvc.perform(get("/api/tasks/{id}/news", otherTaskId)
+                        .header("Authorization", "Bearer " + internToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(403));
+
+        mockMvc.perform(post("/api/tasks/{id}/news/refresh", otherTaskId)
+                        .header("Authorization", "Bearer " + internToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(403));
+    }
+
     private String loginAndExtractToken(String username, String password) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -872,8 +1051,29 @@ class TaskManagementApplicationTests {
         return jdbcTemplate.queryForObject("SELECT id FROM news_items WHERE url = ?", Long.class, url);
     }
 
+    private Long createTaskNewsRow(Long taskId, Long newsId) {
+        jdbcTemplate.update("""
+                INSERT INTO task_news (task_id, news_id)
+                VALUES (?, ?)
+                """,
+                taskId,
+                newsId);
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM task_news WHERE task_id = ? AND news_id = ?",
+                Long.class,
+                taskId,
+                newsId);
+    }
+
     private Long newsCount() {
         return jdbcTemplate.queryForObject("SELECT COUNT(*) FROM news_items", Long.class);
+    }
+
+    private Long taskNewsCount(Long taskId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM task_news WHERE task_id = ?",
+                Long.class,
+                taskId);
     }
 
     private Long responseDataId(MvcResult result) throws Exception {

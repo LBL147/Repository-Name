@@ -79,6 +79,13 @@ public class TaskService {
         return TaskResponse.from(task);
     }
 
+    public Task getVisibleTaskEntity(Long id) {
+        CurrentUser currentUser = CurrentUserContext.get();
+        Task task = findTask(id);
+        requireVisible(currentUser, task);
+        return task;
+    }
+
     @Transactional
     public TaskResponse updateTask(Long id, UpdateTaskRequest request) {
         CurrentUser currentUser = CurrentUserContext.get();

@@ -3,13 +3,18 @@ package com.icinfo.taskmanagement.controller;
 import com.icinfo.taskmanagement.common.ApiResponse;
 import com.icinfo.taskmanagement.common.PageResponse;
 import com.icinfo.taskmanagement.dto.CreateTaskRequest;
+import com.icinfo.taskmanagement.dto.RefreshTaskNewsRequest;
+import com.icinfo.taskmanagement.dto.RefreshTaskNewsResponse;
+import com.icinfo.taskmanagement.dto.TaskNewsResponse;
 import com.icinfo.taskmanagement.dto.TaskListItemResponse;
 import com.icinfo.taskmanagement.dto.TaskQueryRequest;
 import com.icinfo.taskmanagement.dto.TaskResponse;
 import com.icinfo.taskmanagement.dto.UpdateTaskStatusRequest;
 import com.icinfo.taskmanagement.dto.UpdateTaskRequest;
+import com.icinfo.taskmanagement.service.TaskNewsService;
 import com.icinfo.taskmanagement.service.TaskService;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -26,8 +31,11 @@ public class TaskController {
 
     private final TaskService taskService;
 
-    public TaskController(TaskService taskService) {
+    private final TaskNewsService taskNewsService;
+
+    public TaskController(TaskService taskService, TaskNewsService taskNewsService) {
         this.taskService = taskService;
+        this.taskNewsService = taskNewsService;
     }
 
     @GetMapping
@@ -43,6 +51,19 @@ public class TaskController {
     @GetMapping("/{id}")
     public ApiResponse<TaskResponse> getTask(@PathVariable Long id) {
         return ApiResponse.success(taskService.getTask(id));
+    }
+
+    @GetMapping("/{id}/news")
+    public ApiResponse<List<TaskNewsResponse>> listTaskNews(@PathVariable Long id) {
+        return ApiResponse.success(taskNewsService.listTaskNews(id));
+    }
+
+    @PostMapping("/{id}/news/refresh")
+    public ApiResponse<RefreshTaskNewsResponse> refreshTaskNews(
+            @PathVariable Long id,
+            @Valid @RequestBody(required = false) RefreshTaskNewsRequest request
+    ) {
+        return ApiResponse.success(taskNewsService.refreshTaskNews(id, request));
     }
 
     @PutMapping("/{id}")
