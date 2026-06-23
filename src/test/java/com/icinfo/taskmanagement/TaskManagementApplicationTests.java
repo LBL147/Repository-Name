@@ -3,6 +3,7 @@ package com.icinfo.taskmanagement;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -12,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.Connection;
+import java.time.LocalDateTime;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -498,6 +500,121 @@ class TaskManagementApplicationTests {
                 .andExpect(jsonPath("$.data.records[0].id").value(ownTaskId));
     }
 
+    @Test
+    void mentorCanUpdateTaskStatusFromTodoToInProgress() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long taskId = createTaskRow("Status flow todo task", internId, mentorId);
+        jdbcTemplate.update("UPDATE tasks SET updated_at = ? WHERE id = ?", "2026-01-01 00:00:00", taskId);
+        LocalDateTime previousUpdatedAt = taskUpdatedAt(taskId);
+
+        mockMvc.perform(patch("/api/tasks/{id}/status", taskId)
+                        .header("Authorization", "Bearer " + mentorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "status": "IN_PROGRESS"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.data.updatedAt").isNotEmpty());
+
+        assertThat(taskStatus(taskId)).isEqualTo("IN_PROGRESS");
+        assertThat(taskUpdatedAt(taskId)).isAfter(previousUpdatedAt);
+    }
+
+    @Test
+    void internCanUpdateOwnTaskStatusFromInProgressToDone() throws Exception {
+        String internToken = loginAndExtractToken("intern_mock", "intern123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long taskId = createTaskRow(
+                "Status flow in progress task",
+                "Move to done",
+                "IN_PROGRESS",
+                internId,
+                mentorId,
+                "2026-07-20");
+
+        mockMvc.perform(patch("/api/tasks/{id}/status", taskId)
+                        .header("Authorization", "Bearer " + internToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "status": "DONE"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("DONE"));
+
+        assertThat(taskStatus(taskId)).isEqualTo("DONE");
+    }
+
+    @Test
+    void statusUpdateRejectsInvalidStatus() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long taskId = createTaskRow("Status flow invalid task", internId, mentorId);
+
+        mockMvc.perform(patch("/api/tasks/{id}/status", taskId)
+                        .header("Authorization", "Bearer " + mentorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "status": "ARCHIVED"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.data").doesNotExist());
+
+        assertThat(taskStatus(taskId)).isEqualTo("TODO");
+    }
+
+    @Test
+    void statusUpdateRejectsInternUpdatingOthersTask() throws Exception {
+        String internToken = loginAndExtractToken("intern_mock", "intern123");
+        Long mentorId = userId("mentor_mock");
+        Long otherInternId = userId("intern_other");
+        Long taskId = createTaskRow("Status flow other assignee task", otherInternId, mentorId);
+
+        mockMvc.perform(patch("/api/tasks/{id}/status", taskId)
+                        .header("Authorization", "Bearer " + internToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "status": "IN_PROGRESS"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(403))
+                .andExpect(jsonPath("$.data").doesNotExist());
+
+        assertThat(taskStatus(taskId)).isEqualTo("TODO");
+    }
+
+    @Test
+    void statusUpdateRejectsMissingTask() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+
+        mockMvc.perform(patch("/api/tasks/{id}/status", 999999L)
+                        .header("Authorization", "Bearer " + mentorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "status": "DONE"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(404))
+                .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
     private String loginAndExtractToken(String username, String password) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -550,6 +667,20 @@ class TaskManagementApplicationTests {
                 creatorId,
                 dueDate);
         return jdbcTemplate.queryForObject("SELECT id FROM tasks WHERE title = ?", Long.class, title);
+    }
+
+    private String taskStatus(Long taskId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT status FROM tasks WHERE id = ?",
+                String.class,
+                taskId);
+    }
+
+    private LocalDateTime taskUpdatedAt(Long taskId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT updated_at FROM tasks WHERE id = ?",
+                LocalDateTime.class,
+                taskId);
     }
 
     private Long responseDataId(MvcResult result) throws Exception {

@@ -4,7 +4,7 @@
 
 - [x] [用户认证](./auth.md)
 - [x] [任务管理](./task-management.md)
-- [ ] [状态流转](./status-flow.md)
+- [x] [状态流转](./status-flow.md)
 - [x] [筛选搜索](./filter-search.md)
 - [ ] [实时资讯](./news.md)
 - [ ] [资讯关联](./task-news.md)

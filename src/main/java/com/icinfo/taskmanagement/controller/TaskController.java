@@ -6,11 +6,13 @@ import com.icinfo.taskmanagement.dto.CreateTaskRequest;
 import com.icinfo.taskmanagement.dto.TaskListItemResponse;
 import com.icinfo.taskmanagement.dto.TaskQueryRequest;
 import com.icinfo.taskmanagement.dto.TaskResponse;
+import com.icinfo.taskmanagement.dto.UpdateTaskStatusRequest;
 import com.icinfo.taskmanagement.dto.UpdateTaskRequest;
 import com.icinfo.taskmanagement.service.TaskService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -49,6 +51,14 @@ public class TaskController {
             @Valid @RequestBody UpdateTaskRequest request
     ) {
         return ApiResponse.success(taskService.updateTask(id, request));
+    }
+
+    @PatchMapping("/{id}/status")
+    public ApiResponse<TaskResponse> updateTaskStatus(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateTaskStatusRequest request
+    ) {
+        return ApiResponse.success(taskService.updateTaskStatus(id, request));
     }
 
     @DeleteMapping("/{id}")

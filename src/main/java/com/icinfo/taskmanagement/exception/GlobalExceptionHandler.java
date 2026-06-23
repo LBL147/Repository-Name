@@ -5,6 +5,7 @@ import com.icinfo.taskmanagement.common.ErrorCode;
 import jakarta.validation.ConstraintViolationException;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -45,6 +46,12 @@ public class GlobalExceptionHandler {
                 .map(violation -> violation.getPropertyPath() + " " + violation.getMessage())
                 .collect(Collectors.joining("; "));
         return ApiResponse.failure(ErrorCode.BAD_REQUEST, message);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> handleHttpMessageNotReadableException(HttpMessageNotReadableException exception) {
+        return ApiResponse.failure(ErrorCode.BAD_REQUEST, "Invalid request body");
     }
 
     @ExceptionHandler(Exception.class)

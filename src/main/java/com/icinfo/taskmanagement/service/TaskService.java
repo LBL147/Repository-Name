@@ -9,6 +9,7 @@ import com.icinfo.taskmanagement.dto.CreateTaskRequest;
 import com.icinfo.taskmanagement.dto.TaskListItemResponse;
 import com.icinfo.taskmanagement.dto.TaskQueryRequest;
 import com.icinfo.taskmanagement.dto.TaskResponse;
+import com.icinfo.taskmanagement.dto.UpdateTaskStatusRequest;
 import com.icinfo.taskmanagement.dto.UpdateTaskRequest;
 import com.icinfo.taskmanagement.entity.Task;
 import com.icinfo.taskmanagement.entity.TaskPriority;
@@ -95,6 +96,19 @@ public class TaskService {
         task.setPriority(request.getPriority());
         task.setAssigneeId(request.getAssigneeId());
         task.setDueDate(request.getDueDate());
+        task.setUpdatedAt(LocalDateTime.now());
+
+        taskMapper.updateById(task);
+        return TaskResponse.from(task);
+    }
+
+    @Transactional
+    public TaskResponse updateTaskStatus(Long id, UpdateTaskStatusRequest request) {
+        CurrentUser currentUser = CurrentUserContext.get();
+        Task task = findTask(id);
+        requireEditable(currentUser, task);
+
+        task.setStatus(request.getStatus());
         task.setUpdatedAt(LocalDateTime.now());
 
         taskMapper.updateById(task);
