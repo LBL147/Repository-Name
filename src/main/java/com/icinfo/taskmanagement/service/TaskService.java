@@ -15,7 +15,6 @@ import com.icinfo.taskmanagement.entity.Task;
 import com.icinfo.taskmanagement.entity.TaskPriority;
 import com.icinfo.taskmanagement.entity.TaskStatus;
 import com.icinfo.taskmanagement.entity.User;
-import com.icinfo.taskmanagement.entity.UserRole;
 import com.icinfo.taskmanagement.exception.BusinessException;
 import com.icinfo.taskmanagement.mapper.TaskMapper;
 import com.icinfo.taskmanagement.mapper.UserMapper;
@@ -33,9 +32,16 @@ public class TaskService {
 
     private final UserMapper userMapper;
 
-    public TaskService(TaskMapper taskMapper, UserMapper userMapper) {
+    private final TaskVisibilityService taskVisibilityService;
+
+    public TaskService(
+            TaskMapper taskMapper,
+            UserMapper userMapper,
+            TaskVisibilityService taskVisibilityService
+    ) {
         this.taskMapper = taskMapper;
         this.userMapper = userMapper;
+        this.taskVisibilityService = taskVisibilityService;
     }
 
     public PageResponse<TaskListItemResponse> listTasks(TaskQueryRequest request) {
@@ -139,10 +145,7 @@ public class TaskService {
     }
 
     private LambdaQueryWrapper<Task> buildVisibleTaskQuery(CurrentUser currentUser, TaskQueryRequest request) {
-        LambdaQueryWrapper<Task> wrapper = new LambdaQueryWrapper<>();
-        if (!isMentor(currentUser)) {
-            wrapper.eq(Task::getAssigneeId, currentUser.getId());
-        }
+        LambdaQueryWrapper<Task> wrapper = taskVisibilityService.buildVisibleTaskQuery(currentUser);
         if (request.getStatus() != null) {
             wrapper.eq(Task::getStatus, request.getStatus());
         }
@@ -214,6 +217,6 @@ public class TaskService {
     }
 
     private boolean isMentor(CurrentUser currentUser) {
-        return UserRole.MENTOR.name().equals(currentUser.getRole());
+        return taskVisibilityService.isMentor(currentUser);
     }
 }

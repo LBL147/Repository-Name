@@ -4,8 +4,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="32b77527-d88e-456a-bf5c-0ca6e04e3d46" name="Changes" comment="实现实时资讯模块">
+    <list default="true" id="32b77527-d88e-456a-bf5c-0ca6e04e3d46" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/icinfo/taskmanagement/service/TaskService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/icinfo/taskmanagement/service/TaskService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/test/java/com/icinfo/taskmanagement/TaskManagementApplicationTests.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/test/java/com/icinfo/taskmanagement/TaskManagementApplicationTests.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tasks/dashboard.md" beforeDir="false" afterPath="$PROJECT_DIR$/tasks/dashboard.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tasks/progress.md" beforeDir="false" afterPath="$PROJECT_DIR$/tasks/progress.md" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -48,9 +53,9 @@
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
-    "project.structure.last.edited": "Project",
-    "project.structure.proportion": "0.0",
-    "project.structure.side.proportion": "0.0",
+    "project.structure.last.edited": "Global Libraries",
+    "project.structure.proportion": "0.15",
+    "project.structure.side.proportion": "0.2",
     "settings.editor.selected.configurable": "MavenSettings",
     "vue.rearranger.settings.migration": "true"
   }
@@ -72,7 +77,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1782205192089</updated>
-      <workItem from="1782205193194" duration="12568000" />
+      <workItem from="1782205193194" duration="13692000" />
     </task>
     <task id="LOCAL-00001" summary="实现状态流转模块">
       <option name="closed" value="true" />
@@ -98,7 +103,15 @@
       <option name="project" value="LOCAL" />
       <updated>1782225079487</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="实现资讯关联模块">
+      <option name="closed" value="true" />
+      <created>1782225929268</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1782225929268</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -107,6 +120,7 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="实现状态流转模块" />
     <MESSAGE value="实现实时资讯模块" />
-    <option name="LAST_COMMIT_MESSAGE" value="实现实时资讯模块" />
+    <MESSAGE value="实现资讯关联模块" />
+    <option name="LAST_COMMIT_MESSAGE" value="实现资讯关联模块" />
   </component>
 </project>

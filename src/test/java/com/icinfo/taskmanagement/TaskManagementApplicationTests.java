@@ -18,6 +18,7 @@ import com.icinfo.taskmanagement.service.news.NewsFetchException;
 import com.icinfo.taskmanagement.service.news.NewsFetchResult;
 import com.icinfo.taskmanagement.service.news.NewsFetcher;
 import java.sql.Connection;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import javax.sql.DataSource;
@@ -316,6 +317,134 @@ class TaskManagementApplicationTests {
                 .andExpect(jsonPath("$.data.page").value(1))
                 .andExpect(jsonPath("$.data.size").value(10))
                 .andExpect(jsonPath("$.data.records.length()").value(2));
+    }
+
+    @Test
+    void mentorDashboardSummaryCountsAllTasksAndCompletionRate() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long otherInternId = userId("intern_other");
+        createTaskRow("Dashboard todo", "todo", "TODO", internId, mentorId, "2026-07-01");
+        createTaskRow("Dashboard in progress", "doing", "IN_PROGRESS", otherInternId, mentorId, "2026-07-02");
+        createTaskRow("Dashboard done one", "done", "DONE", internId, mentorId, "2026-07-03");
+        createTaskRow("Dashboard done two", "done", "DONE", otherInternId, mentorId, "2026-07-04");
+
+        mockMvc.perform(get("/api/dashboard/summary")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.todoCount").value(1))
+                .andExpect(jsonPath("$.data.inProgressCount").value(1))
+                .andExpect(jsonPath("$.data.doneCount").value(2))
+                .andExpect(jsonPath("$.data.totalCount").value(4))
+                .andExpect(jsonPath("$.data.completionRate").value(50.0));
+    }
+
+    @Test
+    void internDashboardSummaryOnlyCountsAssignedTasks() throws Exception {
+        String internToken = loginAndExtractToken("intern_mock", "intern123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long otherInternId = userId("intern_other");
+        createTaskRow("Intern visible todo", "todo", "TODO", internId, mentorId, "2026-07-01");
+        createTaskRow("Intern visible done", "done", "DONE", internId, mentorId, "2026-07-02");
+        createTaskRow("Intern invisible in progress", "doing", "IN_PROGRESS", otherInternId, mentorId, "2026-07-03");
+
+        mockMvc.perform(get("/api/dashboard/summary")
+                        .header("Authorization", "Bearer " + internToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.todoCount").value(1))
+                .andExpect(jsonPath("$.data.inProgressCount").value(0))
+                .andExpect(jsonPath("$.data.doneCount").value(1))
+                .andExpect(jsonPath("$.data.totalCount").value(2))
+                .andExpect(jsonPath("$.data.completionRate").value(50.0));
+    }
+
+    @Test
+    void dashboardSummaryReturnsZeroRateWhenNoTasksExist() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+
+        mockMvc.perform(get("/api/dashboard/summary")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.todoCount").value(0))
+                .andExpect(jsonPath("$.data.inProgressCount").value(0))
+                .andExpect(jsonPath("$.data.doneCount").value(0))
+                .andExpect(jsonPath("$.data.totalCount").value(0))
+                .andExpect(jsonPath("$.data.completionRate").value(0.0));
+    }
+
+    @Test
+    void dashboardStatusChartReturnsEchartsFriendlyDistribution() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        createTaskRow("Chart todo", "todo", "TODO", internId, mentorId, "2026-07-01");
+        createTaskRow("Chart in progress", "doing", "IN_PROGRESS", internId, mentorId, "2026-07-02");
+        createTaskRow("Chart done", "done", "DONE", internId, mentorId, "2026-07-03");
+
+        mockMvc.perform(get("/api/dashboard/status-chart")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.legendData[0]").value("待办"))
+                .andExpect(jsonPath("$.data.legendData[1]").value("进行中"))
+                .andExpect(jsonPath("$.data.legendData[2]").value("已完成"))
+                .andExpect(jsonPath("$.data.seriesData[0].status").value("TODO"))
+                .andExpect(jsonPath("$.data.seriesData[0].value").value(1))
+                .andExpect(jsonPath("$.data.seriesData[1].status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.data.seriesData[1].value").value(1))
+                .andExpect(jsonPath("$.data.seriesData[2].status").value("DONE"))
+                .andExpect(jsonPath("$.data.seriesData[2].value").value(1));
+    }
+
+    @Test
+    void dashboardOverdueTasksOnlyIncludeVisibleUnfinishedPastDueTasks() throws Exception {
+        String internToken = loginAndExtractToken("intern_mock", "intern123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long otherInternId = userId("intern_other");
+        LocalDate today = LocalDate.now();
+        Long overdueTaskId = createTaskRow(
+                "Visible overdue",
+                "overdue",
+                "TODO",
+                internId,
+                mentorId,
+                today.minusDays(1).toString());
+        createTaskRow(
+                "Completed past due",
+                "done",
+                "DONE",
+                internId,
+                mentorId,
+                today.minusDays(2).toString());
+        createTaskRow(
+                "Not yet due",
+                "future",
+                "IN_PROGRESS",
+                internId,
+                mentorId,
+                today.toString());
+        createTaskRow(
+                "Invisible overdue",
+                "other",
+                "TODO",
+                otherInternId,
+                mentorId,
+                today.minusDays(1).toString());
+
+        mockMvc.perform(get("/api/dashboard/overdue-tasks")
+                        .header("Authorization", "Bearer " + internToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].id").value(overdueTaskId))
+                .andExpect(jsonPath("$.data[0].title").value("Visible overdue"))
+                .andExpect(jsonPath("$.data[0].status").value("TODO"));
     }
 
     @Test
