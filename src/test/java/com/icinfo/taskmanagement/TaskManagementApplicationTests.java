@@ -1,6 +1,7 @@
 package com.icinfo.taskmanagement;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -12,12 +13,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.icinfo.taskmanagement.service.news.ExternalNewsItem;
+import com.icinfo.taskmanagement.service.news.NewsFetchException;
+import com.icinfo.taskmanagement.service.news.NewsFetchResult;
+import com.icinfo.taskmanagement.service.news.NewsFetcher;
 import java.sql.Connection;
 import java.time.LocalDateTime;
+import java.util.List;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -40,6 +47,9 @@ class TaskManagementApplicationTests {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @MockBean
+    private NewsFetcher newsFetcher;
 
     @BeforeEach
     void setUpDatabase() {
@@ -95,6 +105,24 @@ class TaskManagementApplicationTests {
                     KEY idx_tasks_due_date (due_date)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS news_items (
+                    id BIGINT NOT NULL AUTO_INCREMENT,
+                    title VARCHAR(512) NOT NULL,
+                    url TEXT NOT NULL,
+                    url_hash CHAR(64) NOT NULL,
+                    source VARCHAR(128) NOT NULL,
+                    keyword VARCHAR(128) NOT NULL,
+                    published_at DATETIME NULL,
+                    fetched_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    UNIQUE KEY uk_news_items_url_hash (url_hash),
+                    KEY idx_news_items_keyword (keyword),
+                    KEY idx_news_items_published_at (published_at),
+                    KEY idx_news_items_fetched_at (fetched_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+        jdbcTemplate.update("DELETE FROM news_items");
         jdbcTemplate.update("DELETE FROM tasks");
     }
 
@@ -615,6 +643,152 @@ class TaskManagementApplicationTests {
                 .andExpect(jsonPath("$.data").doesNotExist());
     }
 
+    @Test
+    void listNewsSupportsKeywordAndPagination() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+        Long olderNewsId = createNewsRow(
+                "AI policy update",
+                "https://example.com/ai-policy",
+                "Example News",
+                "AI",
+                "2026-06-20 10:00:00");
+        Long newerNewsId = createNewsRow(
+                "AI industry update",
+                "https://example.com/ai-industry",
+                "Example News",
+                "AI",
+                "2026-06-21 10:00:00");
+        createNewsRow(
+                "Cloud release",
+                "https://example.com/cloud",
+                "Cloud Daily",
+                "cloud",
+                "2026-06-22 10:00:00");
+
+        mockMvc.perform(get("/api/news")
+                        .param("keyword", "AI")
+                        .param("page", "1")
+                        .param("size", "1")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.total").value(2))
+                .andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.size").value(1))
+                .andExpect(jsonPath("$.data.records.length()").value(1))
+                .andExpect(jsonPath("$.data.records[0].id").value(newerNewsId));
+
+        mockMvc.perform(get("/api/news")
+                        .param("keyword", "AI")
+                        .param("page", "2")
+                        .param("size", "1")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.total").value(2))
+                .andExpect(jsonPath("$.data.records[0].id").value(olderNewsId));
+    }
+
+    @Test
+    void refreshNewsCachesFetchedItemsAndDeduplicatesUrl() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+        when(newsFetcher.fetch("AI")).thenReturn(new NewsFetchResult(
+                "GDELT DOC API",
+                List.of(
+                        new ExternalNewsItem(
+                                "AI policy update",
+                                "https://example.com/ai-policy",
+                                "Example News",
+                                LocalDateTime.of(2026, 6, 20, 10, 0)),
+                        new ExternalNewsItem(
+                                "AI policy duplicate",
+                                "https://example.com/ai-policy",
+                                "Example News",
+                                LocalDateTime.of(2026, 6, 20, 10, 0)),
+                        new ExternalNewsItem(
+                                "AI industry update",
+                                "https://example.com/ai-industry",
+                                "Industry News",
+                                LocalDateTime.of(2026, 6, 21, 10, 0)))));
+
+        mockMvc.perform(post("/api/news/refresh")
+                        .header("Authorization", "Bearer " + mentorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "keyword": "AI"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.source").value("GDELT DOC API"))
+                .andExpect(jsonPath("$.data.fetchedCount").value(3))
+                .andExpect(jsonPath("$.data.insertedCount").value(2))
+                .andExpect(jsonPath("$.data.cacheFallback").value(false))
+                .andExpect(jsonPath("$.data.records.length()").value(2));
+
+        assertThat(newsCount()).isEqualTo(2L);
+
+        mockMvc.perform(post("/api/news/refresh")
+                        .header("Authorization", "Bearer " + mentorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "keyword": "AI"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.insertedCount").value(0));
+
+        assertThat(newsCount()).isEqualTo(2L);
+    }
+
+    @Test
+    void refreshNewsReturnsCachedDataWhenExternalSourcesFail() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+        createNewsRow(
+                "Cached AI update",
+                "https://example.com/cached-ai",
+                "Cached Source",
+                "AI",
+                "2026-06-20 10:00:00");
+        when(newsFetcher.fetch("AI")).thenThrow(new NewsFetchException("down"));
+
+        mockMvc.perform(post("/api/news/refresh")
+                        .header("Authorization", "Bearer " + mentorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "keyword": "AI"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.cacheFallback").value(true))
+                .andExpect(jsonPath("$.data.message").value("外部资讯暂时不可用，已返回缓存数据"))
+                .andExpect(jsonPath("$.data.records.length()").value(1))
+                .andExpect(jsonPath("$.data.records[0].title").value("Cached AI update"));
+    }
+
+    @Test
+    void refreshNewsReturnsFriendlyErrorWhenNoCacheExists() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+        when(newsFetcher.fetch("AI")).thenThrow(new NewsFetchException("down"));
+
+        mockMvc.perform(post("/api/news/refresh")
+                        .header("Authorization", "Bearer " + mentorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "keyword": "AI"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(1000))
+                .andExpect(jsonPath("$.message").value("外部资讯暂时不可用，请稍后重试"));
+    }
+
     private String loginAndExtractToken(String username, String password) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -681,6 +855,25 @@ class TaskManagementApplicationTests {
                 "SELECT updated_at FROM tasks WHERE id = ?",
                 LocalDateTime.class,
                 taskId);
+    }
+
+    private Long createNewsRow(String title, String url, String source, String keyword, String publishedAt) {
+        jdbcTemplate.update("""
+                INSERT INTO news_items (title, url, url_hash, source, keyword, published_at, fetched_at)
+                VALUES (?, ?, SHA2(?, 256), ?, ?, ?, ?)
+                """,
+                title,
+                url,
+                url,
+                source,
+                keyword,
+                publishedAt,
+                "2026-06-23 10:00:00");
+        return jdbcTemplate.queryForObject("SELECT id FROM news_items WHERE url = ?", Long.class, url);
+    }
+
+    private Long newsCount() {
+        return jdbcTemplate.queryForObject("SELECT COUNT(*) FROM news_items", Long.class);
     }
 
     private Long responseDataId(MvcResult result) throws Exception {

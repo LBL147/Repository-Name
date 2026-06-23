@@ -8,9 +8,10 @@
 SOURCE sql/00-create-database.sql;
 SOURCE sql/01-auth-users.sql;
 SOURCE sql/02-task-tasks.sql;
+SOURCE sql/03-news-items.sql;
 ```
 
-Execution order: run `00-create-database.sql` first, then `01-auth-users.sql`, then `02-task-tasks.sql`.
+Execution order: run `00-create-database.sql` first, then `01-auth-users.sql`, then `02-task-tasks.sql`, then `03-news-items.sql`.
 
 也可以直接复制 `00-create-database.sql` 内容到 MySQL 客户端执行。
 
@@ -26,4 +27,4 @@ Execution order: run `00-create-database.sql` first, then `01-auth-users.sql`, t
 
 ## 后续脚本
 
-当前只搭建基础框架，暂不创建业务表。后续实现用户认证、任务管理、资讯、仪表盘等模块时，再追加对应建表和初始化数据脚本。
+当前已包含用户认证、任务管理和实时资讯缓存相关表。后续实现资讯关联、仪表盘、Excel 导出等模块时，再追加对应建表和初始化数据脚本。

@@ -6,7 +6,7 @@
 - [x] [任务管理](./task-management.md)
 - [x] [状态流转](./status-flow.md)
 - [x] [筛选搜索](./filter-search.md)
-- [ ] [实时资讯](./news.md)
+- [x] [实时资讯](./news.md)（后端搜索、刷新、缓存已完成；前端展示项未纳入本次范围）
 - [ ] [资讯关联](./task-news.md)
 - [ ] [仪表盘](./dashboard.md)
 - [ ] [Excel 导出](./excel-export.md)
