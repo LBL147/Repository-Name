@@ -1,10 +1,19 @@
 import { http, unwrap } from './http';
-import type { DashboardStatusChart, DashboardSummary } from '@/types/dashboard';
+import type { DashboardStatusChartResponse, DashboardSummaryResponse } from '@/types/dashboard';
+import type { TaskListItemResponse } from '@/types/task';
 
 export function fetchDashboardSummary() {
-  return unwrap<DashboardSummary>(http.get('/dashboard/summary'));
+  return unwrap<DashboardSummaryResponse>(http.get('/dashboard/summary'));
 }
 
 export function fetchDashboardStatusChart() {
-  return unwrap<DashboardStatusChart>(http.get('/dashboard/status-chart'));
+  return unwrap<DashboardStatusChartResponse>(http.get('/dashboard/status-chart'));
+}
+
+export function fetchDashboardUpcomingTasks() {
+  return unwrap<TaskListItemResponse[]>(http.get('/dashboard/upcoming-tasks'));
+}
+
+export function fetchDashboardOverdueTasks() {
+  return unwrap<TaskListItemResponse[]>(http.get('/dashboard/overdue-tasks'));
 }

@@ -1,4 +1,6 @@
-export interface DashboardSummary {
+import type { TaskStatus } from './api';
+
+export interface DashboardSummaryResponse {
   todoCount: number;
   inProgressCount: number;
   doneCount: number;
@@ -8,11 +10,15 @@ export interface DashboardSummary {
 
 export interface DashboardStatusChartItem {
   name: string;
-  status: string;
+  status: TaskStatus;
   value: number;
 }
 
-export interface DashboardStatusChart {
+export interface DashboardStatusChartResponse {
   legendData: string[];
   seriesData: DashboardStatusChartItem[];
 }
+
+export type DashboardSummary = DashboardSummaryResponse;
+
+export type DashboardStatusChart = DashboardStatusChartResponse;
