@@ -2,11 +2,11 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Delete, Edit, Grid, List, Plus, Refresh, View } from '@element-plus/icons-vue';
-import { createTask, deleteTask, fetchTask, fetchTasks, updateTask } from '@/api/tasks';
+import { Delete, Edit, Grid, List, Plus, Refresh, Right, Search, Select, View } from '@element-plus/icons-vue';
+import { createTask, deleteTask, fetchTask, fetchTasks, updateTask, updateTaskStatus } from '@/api/tasks';
 import { useAuthStore } from '@/stores/auth';
 import type { TaskPriority, TaskStatus } from '@/types/api';
-import type { TaskListItemResponse, TaskResponse } from '@/types/task';
+import type { TaskListItemResponse, TaskQuery, TaskResponse } from '@/types/task';
 import { priorityLabels, priorityTagTypes, statusLabels, statusTagTypes } from '@/utils/labels';
 
 type ViewMode = 'table' | 'cards';
@@ -21,12 +21,20 @@ interface TaskFormState {
   status: TaskStatus;
 }
 
+interface TaskFilterState {
+  status: TaskStatus | '';
+  assigneeId?: number;
+  dueDateRange: [string, string] | null;
+  keyword: string;
+}
+
 const auth = useAuthStore();
 const loading = ref(false);
 const saving = ref(false);
 const detailLoading = ref(false);
 const loadError = ref('');
 const tasks = ref<TaskListItemResponse[]>([]);
+const statusUpdatingIds = ref(new Set<number>());
 const total = ref(0);
 const currentPage = ref(1);
 const pageSize = ref(10);
@@ -43,6 +51,14 @@ const form = reactive<TaskFormState>({
   priority: 'MEDIUM',
   dueDate: '',
   status: 'TODO',
+});
+
+const filters = reactive<TaskFilterState>({
+  status: '',
+  // TODO: replace numeric assignee fields with a user selector once a user list API is available.
+  assigneeId: undefined,
+  dueDateRange: null,
+  keyword: '',
 });
 
 const rules: FormRules<TaskFormState> = {
@@ -77,6 +93,9 @@ const canCreate = computed(() => auth.isMentor);
 const canDelete = computed(() => auth.isMentor);
 const dialogTitle = computed(() => (dialogMode.value === 'create' ? '新增任务' : '任务详情 / 编辑'));
 const emptyText = computed(() => (loadError.value ? '任务加载失败' : '暂无任务'));
+const canUpdateCurrentTaskStatus = computed(
+  () => dialogMode.value === 'edit' && currentTaskId.value !== null && canUpdateStatus({ assigneeId: form.assigneeId }),
+);
 
 function formatUserId(id: number) {
   if (auth.user?.id === id) {
@@ -105,6 +124,72 @@ function priorityTagType(priority: TaskPriority) {
   return priorityTagTypes[priority];
 }
 
+function canUpdateStatus(task: Pick<TaskListItemResponse, 'assigneeId'> | { assigneeId?: number }) {
+  return auth.isMentor || (task.assigneeId !== undefined && auth.user?.id === task.assigneeId);
+}
+
+function nextStatus(status: TaskStatus): TaskStatus | null {
+  if (status === 'TODO') {
+    return 'IN_PROGRESS';
+  }
+  if (status === 'IN_PROGRESS') {
+    return 'DONE';
+  }
+  return null;
+}
+
+function nextStatusButtonText(status: TaskStatus) {
+  if (status === 'TODO') {
+    return '开始处理';
+  }
+  if (status === 'IN_PROGRESS') {
+    return '标记完成';
+  }
+  return '已完成';
+}
+
+function nextStatusButtonIcon(status: TaskStatus) {
+  return status === 'IN_PROGRESS' ? Select : Right;
+}
+
+function isStatusUpdating(id: number) {
+  return statusUpdatingIds.value.has(id);
+}
+
+function setStatusUpdating(id: number, updating: boolean) {
+  const nextIds = new Set(statusUpdatingIds.value);
+  if (updating) {
+    nextIds.add(id);
+  } else {
+    nextIds.delete(id);
+  }
+  statusUpdatingIds.value = nextIds;
+}
+
+function buildTaskQuery(): TaskQuery {
+  const query: TaskQuery = {
+    page: currentPage.value,
+    size: pageSize.value,
+  };
+
+  if (filters.status) {
+    query.status = filters.status;
+  }
+  if (filters.assigneeId) {
+    query.assigneeId = filters.assigneeId;
+  }
+  if (filters.dueDateRange) {
+    query.dueDateStart = filters.dueDateRange[0];
+    query.dueDateEnd = filters.dueDateRange[1];
+  }
+  const keyword = filters.keyword.trim();
+  if (keyword) {
+    query.keyword = keyword;
+  }
+
+  return query;
+}
+
 function resetForm() {
   form.title = '';
   form.description = '';
@@ -130,10 +215,7 @@ async function loadTasks() {
   loading.value = true;
   loadError.value = '';
   try {
-    const page = await fetchTasks({
-      page: currentPage.value,
-      size: pageSize.value,
-    });
+    const page = await fetchTasks(buildTaskQuery());
     tasks.value = page.records;
     total.value = page.total;
   } catch (error) {
@@ -142,6 +224,20 @@ async function loadTasks() {
   } finally {
     loading.value = false;
   }
+}
+
+function handleSearch() {
+  currentPage.value = 1;
+  loadTasks();
+}
+
+function resetFilters() {
+  filters.status = '';
+  filters.assigneeId = undefined;
+  filters.dueDateRange = null;
+  filters.keyword = '';
+  currentPage.value = 1;
+  loadTasks();
 }
 
 function openCreateDialog() {
@@ -200,6 +296,63 @@ async function submitForm() {
     ElMessage.error(error instanceof Error ? error.message : '任务保存失败');
   } finally {
     saving.value = false;
+  }
+}
+
+async function changeTaskStatus(task: TaskListItemResponse, status: TaskStatus) {
+  if (!canUpdateStatus(task)) {
+    ElMessage.warning('当前账号无权更新该任务状态');
+    return;
+  }
+  if (task.status === status || isStatusUpdating(task.id)) {
+    return;
+  }
+
+  setStatusUpdating(task.id, true);
+  try {
+    const updatedTask = await updateTaskStatus(task.id, { status });
+    ElMessage.success(`任务状态已更新为${statusLabel(status)}`);
+    if (currentTaskId.value === task.id) {
+      applyTaskToForm(updatedTask);
+    }
+    await loadTasks();
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '状态更新失败，请稍后重试');
+  } finally {
+    setStatusUpdating(task.id, false);
+  }
+}
+
+function changeTaskToNextStatus(task: TaskListItemResponse) {
+  const targetStatus = nextStatus(task.status);
+  if (targetStatus) {
+    changeTaskStatus(task, targetStatus);
+  }
+}
+
+async function changeCurrentTaskStatus(status: TaskStatus) {
+  if (currentTaskId.value === null || !canUpdateCurrentTaskStatus.value || form.status === status) {
+    return;
+  }
+
+  const taskId = currentTaskId.value;
+  setStatusUpdating(taskId, true);
+  try {
+    const updatedTask = await updateTaskStatus(taskId, { status });
+    applyTaskToForm(updatedTask);
+    ElMessage.success(`任务状态已更新为${statusLabel(status)}`);
+    await loadTasks();
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '状态更新失败，请稍后重试');
+  } finally {
+    setStatusUpdating(taskId, false);
+  }
+}
+
+function changeCurrentTaskToNextStatus() {
+  const targetStatus = nextStatus(form.status);
+  if (targetStatus) {
+    changeCurrentTaskStatus(targetStatus);
   }
 }
 
@@ -269,6 +422,52 @@ onMounted(loadTasks);
     </header>
 
     <div class="panel toolbar-panel">
+      <el-form class="filter-form" :model="filters" label-position="top">
+        <el-form-item label="状态">
+          <el-select v-model="filters.status" clearable placeholder="全部状态">
+            <el-option
+              v-for="option in statusOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="负责人 ID">
+          <el-input-number
+            v-model="filters.assigneeId"
+            :min="1"
+            :precision="0"
+            clearable
+            controls-position="right"
+            placeholder="全部负责人"
+          />
+        </el-form-item>
+        <el-form-item label="截止日期">
+          <el-date-picker
+            v-model="filters.dueDateRange"
+            type="daterange"
+            value-format="YYYY-MM-DD"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            range-separator="至"
+            clearable
+          />
+        </el-form-item>
+        <el-form-item label="关键词">
+          <el-input
+            v-model="filters.keyword"
+            clearable
+            placeholder="搜索标题或描述"
+            @keyup.enter="handleSearch"
+          />
+        </el-form-item>
+        <div class="filter-actions">
+          <el-button type="primary" :icon="Search" :loading="loading" @click="handleSearch">搜索</el-button>
+          <el-button :icon="Refresh" :disabled="loading" @click="resetFilters">重置</el-button>
+        </div>
+      </el-form>
+
       <div class="toolbar">
         <div class="list-summary">
           <strong>{{ total }}</strong>
@@ -320,9 +519,20 @@ onMounted(loadTasks);
               {{ normalizeDate(row.dueDate) }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="190" fixed="right">
+          <el-table-column label="操作" width="290" fixed="right">
             <template #default="{ row }">
               <div class="row-actions">
+                <el-button
+                  v-if="nextStatus(row.status) && canUpdateStatus(row)"
+                  size="small"
+                  type="primary"
+                  plain
+                  :icon="nextStatusButtonIcon(row.status)"
+                  :loading="isStatusUpdating(row.id)"
+                  @click="changeTaskToNextStatus(row)"
+                >
+                  {{ nextStatusButtonText(row.status) }}
+                </el-button>
                 <el-button size="small" :icon="View" @click="openEditDialog(row)">详情</el-button>
                 <el-button size="small" :icon="Edit" @click="openEditDialog(row)">编辑</el-button>
                 <el-button
@@ -364,6 +574,16 @@ onMounted(loadTasks);
               <strong>{{ normalizeDate(task.dueDate) }}</strong>
             </div>
             <div class="card-actions">
+              <el-button
+                v-if="nextStatus(task.status) && canUpdateStatus(task)"
+                type="primary"
+                plain
+                :icon="nextStatusButtonIcon(task.status)"
+                :loading="isStatusUpdating(task.id)"
+                @click="changeTaskToNextStatus(task)"
+              >
+                {{ nextStatusButtonText(task.status) }}
+              </el-button>
               <el-button :icon="View" @click="openEditDialog(task)">详情 / 编辑</el-button>
               <el-button v-if="canDelete" type="danger" :icon="Delete" @click="confirmDelete(task)">删除</el-button>
             </div>
@@ -442,7 +662,7 @@ onMounted(loadTasks);
               />
             </el-form-item>
             <el-form-item label="状态" prop="status">
-              <el-select v-model="form.status">
+              <el-select v-model="form.status" :disabled="dialogMode === 'edit' && !canUpdateCurrentTaskStatus">
                 <el-option
                   v-for="option in statusOptions"
                   :key="option.value"
@@ -453,6 +673,27 @@ onMounted(loadTasks);
             </el-form-item>
           </div>
         </el-form>
+
+        <div v-if="dialogMode === 'edit'" class="status-flow-panel">
+          <div>
+            <span>当前状态</span>
+            <el-tag :type="statusTagType(form.status)" effect="light">
+              {{ statusLabel(form.status) }}
+            </el-tag>
+          </div>
+          <el-button
+            v-if="nextStatus(form.status) && canUpdateCurrentTaskStatus"
+            type="primary"
+            plain
+            :icon="nextStatusButtonIcon(form.status)"
+            :loading="currentTaskId !== null && isStatusUpdating(currentTaskId)"
+            @click="changeCurrentTaskToNextStatus"
+          >
+            {{ nextStatusButtonText(form.status) }}
+          </el-button>
+          <span v-else-if="form.status === 'DONE'" class="done-text">已完成</span>
+          <span v-else class="muted-text">当前账号无权更新状态</span>
+        </div>
       </div>
 
       <template #footer>
@@ -494,6 +735,32 @@ onMounted(loadTasks);
   overflow: hidden;
 }
 
+.filter-form {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.8fr) minmax(150px, 0.8fr) minmax(260px, 1.25fr) minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--tm-border);
+}
+
+.filter-form :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+.filter-form :deep(.el-select),
+.filter-form :deep(.el-date-editor),
+.filter-form :deep(.el-input-number) {
+  width: 100%;
+}
+
+.filter-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .toolbar {
   justify-content: space-between;
   padding: 14px 16px;
@@ -526,6 +793,7 @@ onMounted(loadTasks);
   padding: 0;
   color: #1d4ed8;
   background: transparent;
+  cursor: pointer;
   font: inherit;
   font-weight: 650;
   text-align: left;
@@ -621,6 +889,30 @@ onMounted(loadTasks);
   min-height: 240px;
 }
 
+.status-flow-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--tm-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #f8fafc;
+}
+
+.status-flow-panel > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--tm-muted);
+}
+
+.done-text,
+.muted-text {
+  color: var(--tm-muted);
+  font-size: 13px;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -638,12 +930,24 @@ onMounted(loadTasks);
 }
 
 @media (max-width: 1024px) {
+  .filter-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filter-actions {
+    justify-content: flex-start;
+  }
+
   .task-card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 768px) {
+  .filter-form {
+    grid-template-columns: 1fr;
+  }
+
   .toolbar {
     align-items: stretch;
     flex-direction: column;
@@ -657,6 +961,11 @@ onMounted(loadTasks);
   .pagination-row {
     justify-content: flex-start;
     overflow-x: auto;
+  }
+
+  .status-flow-panel {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>
