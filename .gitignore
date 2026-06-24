@@ -4,14 +4,13 @@ target/
 !**/src/test/**/target/
 
 ### IntelliJ IDEA ###
-.idea/modules.xml
-.idea/jarRepositories.xml
-.idea/compiler.xml
-.idea/workspace.xml
-.idea/libraries/
+.idea/
 *.iws
 *.iml
 *.ipr
+
+### Codex ###
+.codex-run/
 
 ### Eclipse ###
 .apt_generated
@@ -34,6 +33,11 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Frontend ###
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
 
 ### Mac OS ###
 .DS_Store
