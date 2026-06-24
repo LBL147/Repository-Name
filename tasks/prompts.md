@@ -246,3 +246,231 @@
 - 不要批量删除文件或目录。
 - 不要改动无关业务模块。
 ```
+
+## 9. 前端登录与鉴权
+
+前端阶段通用上下文：每个新会话先阅读 `frontend/DESIGN.md`、`frontend/README.md` 和 `design-system/icinfo-task-management/MASTER.md`，并遵守“不要批量删除文件或目录”的项目约束。
+
+```text
+请在 frontend/ 工程中实现前端登录与鉴权模块。
+
+前置条件：
+- 后端认证接口已经完成。
+- frontend/ 已有 Vue3 + Vite + TypeScript + Element Plus + Pinia + Vue Router 骨架。
+- 先阅读 design-system/icinfo-task-management/MASTER.md、frontend/README.md、tasks/auth.md。
+
+实现要求：
+1. 完善 src/api/auth.ts 与 src/stores/auth.ts，确保 login、mock-login、register、me 可用。
+2. 登录页支持用户名密码登录。
+3. 登录页支持导师 Mock 登录和实习生 Mock 登录。
+4. 登录成功后保存 token 和用户信息，并跳转 /tasks。
+5. Axios 请求自动附加 Authorization: Bearer <token>。
+6. 路由守卫拦截未登录访问 /tasks、/dashboard、/news。
+7. 页面刷新后能根据 token 恢复登录态。
+8. token 失效或接口返回未登录时清理本地登录状态并返回登录页。
+9. 表单、按钮、错误提示使用 Element Plus；图标使用 @element-plus/icons-vue，不使用 emoji 图标。
+10. 保持响应式布局，至少检查 375px、768px、1024px、1440px。
+11. 完成后运行：
+    cd frontend
+    npm install
+    npm run build
+12. 如后端可用，启动后端和前端，手动验证导师/实习生登录。
+13. 完成后勾选 tasks/auth.md 中所有前端相关未完成项。
+
+注意：
+- 不要批量删除文件或目录。
+- 不要实现任务 CRUD、资讯、仪表盘、导出等后续模块。
+- 不要修改后端，除非发现接口和文档明显不一致，并先说明原因。
+```
+
+## 10. 前端任务列表与 CRUD
+
+```text
+请在 frontend/ 工程中实现任务列表与 CRUD 前端。
+
+前置条件：
+- 前端登录与鉴权已经完成。
+- 后端任务 CRUD 接口已经完成。
+- 先阅读 design-system/icinfo-task-management/MASTER.md、frontend/README.md、tasks/task-management.md、detailed-design.md 中任务相关 API。
+
+实现要求：
+1. 完善 src/types/task.ts，使字段与后端 TaskResponse、TaskListItemResponse 一致。
+2. 完善 src/api/tasks.ts，封装列表、详情、新增、编辑、删除接口。
+3. 实现 /tasks 页面基础数据加载。
+4. 实现任务表格视图，展示标题、状态、优先级、负责人、截止日期。
+5. 实现任务卡片视图，展示同等核心字段。
+6. 实现表格/卡片视图切换。
+7. 实现新增任务入口。
+8. 实现任务详情/编辑弹窗。
+9. 任务表单支持 title、description、assigneeId、priority、dueDate、status。
+10. 实现编辑保存和删除操作。
+11. 根据当前用户角色隐藏或禁用无权限操作：实习生不能删除任务。
+12. 新增、编辑、删除后刷新当前列表。
+13. 加载中、空状态、失败提示都要有明确 UI。
+14. 图标使用 @element-plus/icons-vue，不使用 emoji 图标。
+15. 完成后运行 npm run build，并手动验证导师和实习生两种角色。
+16. 完成后勾选 tasks/task-management.md 中所有前端相关未完成项。
+
+注意：
+- 不要批量删除文件或目录。
+- 不要实现筛选搜索、状态流转、资讯、仪表盘、导出等后续模块，除非 CRUD 页面必须保留最小入口。
+```
+
+## 11. 前端筛选搜索与状态流转
+
+```text
+请在 frontend/ 工程中实现任务筛选搜索与状态流转前端。
+
+前置条件：
+- 前端登录与鉴权已经完成。
+- 前端任务列表与 CRUD 已经完成。
+- 后端筛选搜索和 PATCH /api/tasks/{id}/status 已经完成。
+- 先阅读 tasks/filter-search.md、tasks/status-flow.md、frontend/README.md、design-system/icinfo-task-management/MASTER.md。
+
+实现要求：
+1. 任务列表页添加状态筛选控件。
+2. 添加负责人筛选控件；如后端没有用户列表接口，可先使用已有任务中的负责人 id 或保留数字输入，并在代码中标注后续替换点。
+3. 添加截止日期范围筛选控件。
+4. 添加关键词输入框。
+5. 搜索按钮按当前筛选条件请求 GET /api/tasks。
+6. 重置按钮清空筛选条件并刷新列表。
+7. 实现分页控件，分页变化时保留当前筛选条件。
+8. 新增、编辑、删除、状态更新后按当前筛选条件刷新。
+9. 前端定义 TaskStatus 类型并与后端 TODO、IN_PROGRESS、DONE 保持一致。
+10. 任务列表展示状态标签。
+11. 任务详情弹窗展示状态选择器。
+12. TODO 任务提供切换到 IN_PROGRESS 的按钮。
+13. IN_PROGRESS 任务提供切换到 DONE 的按钮。
+14. DONE 任务展示已完成状态，不展示继续流转按钮。
+15. 根据权限隐藏或禁用无权更新的状态按钮。
+16. 状态更新失败时展示友好错误提示。
+17. 完成后运行 npm run build，并手动验证筛选、分页、状态按钮和权限边界。
+18. 完成后勾选 tasks/filter-search.md 与 tasks/status-flow.md 中所有前端相关未完成项。
+
+注意：
+- 不要批量删除文件或目录。
+- 不要实现拖拽状态切换。
+- 不要实现资讯、仪表盘、导出等后续模块。
+```
+
+## 12. 前端资讯与任务关联资讯
+
+```text
+请在 frontend/ 工程中实现实时资讯与任务关联资讯前端。
+
+前置条件：
+- 前端任务列表、详情/编辑弹窗已经完成。
+- 后端 GET /api/news、POST /api/news/refresh、GET /api/tasks/{id}/news、POST /api/tasks/{id}/news/refresh 已经完成。
+- 先阅读 tasks/news.md、tasks/task-news.md、frontend/README.md、design-system/icinfo-task-management/MASTER.md。
+
+实现要求：
+1. 完善 src/types/news.ts，与后端 NewsItemResponse、RefreshNewsResponse、TaskNewsResponse 对齐。
+2. 完善 src/api/news.ts，封装资讯列表、资讯刷新、任务关联资讯查询、任务关联资讯刷新。
+3. 实现 /news 页面，支持关键词搜索、刷新和分页列表。
+4. 资讯列表展示标题、来源、发布时间、关键词和跳转链接。
+5. 外部链接使用新窗口打开，并加 rel="noopener noreferrer"。
+6. 刷新失败时展示友好提示，并保留已有列表。
+7. 在任务详情/编辑弹窗中增加关联资讯区域。
+8. 打开任务详情时加载关联资讯。
+9. 支持按任务标题刷新关联资讯。
+10. 支持手动关键词刷新关联资讯。
+11. 刷新成功后更新关联资讯列表。
+12. 刷新失败时只提示资讯错误，不关闭任务弹窗，不影响任务编辑。
+13. 加载中、空状态、失败态都要稳定，不发生布局跳动。
+14. 完成后运行 npm run build，并手动验证独立资讯页和任务弹窗里的关联资讯。
+15. 完成后勾选 tasks/news.md 与 tasks/task-news.md 中所有前端相关未完成项。
+
+注意：
+- 不要批量删除文件或目录。
+- 不要实现仪表盘、导出等后续模块。
+```
+
+## 13. 前端仪表盘
+
+```text
+请在 frontend/ 工程中实现仪表盘前端。
+
+前置条件：
+- 前端登录与鉴权已经完成。
+- 后端 /api/dashboard/summary 与 /api/dashboard/status-chart 已经完成。
+- 先阅读 tasks/dashboard.md、frontend/README.md、design-system/icinfo-task-management/MASTER.md。
+
+实现要求：
+1. 完善 src/types/dashboard.ts，与后端 DashboardSummaryResponse、DashboardStatusChartResponse 对齐。
+2. 完善 src/api/dashboard.ts。
+3. 实现 /dashboard 页面数据加载。
+4. 展示待办、进行中、已完成、总数、完成率统计卡片。
+5. 集成 ECharts。
+6. 实现状态分布图或完成率图。
+7. 实现临期任务提示。
+8. 实现逾期任务提示；逾期规则为截止日期早于当前日期且状态不是 DONE。
+9. 如后端没有独立临期/逾期接口，复用任务筛选接口并在前端计算展示。
+10. 加载失败时展示友好错误或空状态。
+11. 根据当前登录用户展示其权限范围内的统计结果。
+12. 确保 ECharts 容器有稳定高度，移动端不溢出。
+13. 完成后运行 npm run build，并手动验证导师和实习生统计差异。
+14. 完成后勾选 tasks/dashboard.md 中所有前端相关未完成项。
+
+注意：
+- 不要批量删除文件或目录。
+- 不要实现 Excel 导出模块。
+```
+
+## 14. 前端 Excel 导出
+
+```text
+请在 frontend/ 工程中实现任务 Excel 导出前端。
+
+前置条件：
+- 前端任务列表和筛选搜索已经完成。
+- 后端 GET /api/tasks/export 已经完成，返回 .xlsx 文件。
+- 先阅读 tasks/excel-export.md、frontend/README.md、design-system/icinfo-task-management/MASTER.md。
+
+实现要求：
+1. 完善 src/api/tasks.ts 中 exportTasks 方法，使用 responseType: 'blob'。
+2. 在任务列表页添加导出按钮。
+3. 导出时携带当前筛选条件：status、assigneeId、dueDateStart、dueDateEnd、keyword。
+4. 从 Content-Disposition 中解析文件名；解析不到时使用默认文件名 tasks.xlsx。
+5. 处理二进制响应并触发浏览器下载。
+6. 导出过程中按钮展示 loading 状态。
+7. 导出失败时展示友好错误提示。
+8. 根据权限隐藏或禁用不允许导出的入口；如后端允许实习生导出本人任务，则前端保留入口。
+9. 完成后运行 npm run build，并手动验证下载文件可以打开且筛选条件生效。
+10. 完成后勾选 tasks/excel-export.md 中所有前端相关未完成项。
+
+注意：
+- 不要批量删除文件或目录。
+- 不要改动无关业务模块。
+```
+
+## 15. 前端 README、截图与最终验收
+
+```text
+请完成项目最终交付文档、截图和验收检查。
+
+前置条件：
+- 后端所有模块已经完成。
+- 前端登录、任务列表/CRUD、筛选/状态流转、资讯关联、仪表盘、Excel 导出已经完成。
+- 先阅读 plan.md 的验收清单、detailed-design.md、frontend/README.md、tasks/progress.md。
+
+实现要求：
+1. 新增或完善根目录 README.md。
+2. README 包含后端启动方式、前端启动方式、数据库 SQL 执行顺序。
+3. README 包含导师和实习生测试账号说明。
+4. README 包含主要功能说明：登录、任务 CRUD、筛选搜索、状态流转、资讯、仪表盘、Excel 导出。
+5. README 说明 AI 工具使用方式、验证过程和遇到的问题。
+6. 启动后端和前端，完成一次导师账号主流程验收。
+7. 完成一次实习生账号权限边界验收。
+8. 使用浏览器截图保存关键页面：登录页、任务列表、任务弹窗含资讯、仪表盘、导出入口。
+9. 截图放入 docs/screenshots/；如果目录不存在则创建。
+10. 更新 plan.md 验收清单中已完成项。
+11. 更新 tasks/progress.md，明确前端模块完成状态。
+12. 运行后端 mvn test。
+13. 运行前端 npm run build。
+14. 最终回复中列出验证命令、截图路径和仍存在的风险。
+
+注意：
+- 不要批量删除文件或目录。
+- 如需要删除错误截图，只能一次删除一个明确路径的文件。
+- 不要使用 Remove-Item -Recurse、rm -rf、del /s、rd /s、rmdir /s。
+```
