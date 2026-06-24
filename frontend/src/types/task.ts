@@ -1,21 +1,20 @@
 import type { PageResponse, TaskPriority, TaskStatus } from './api';
 
-export interface TaskListItem {
+export interface TaskListItemResponse {
   id: number;
   title: string;
-  description?: string;
   status: TaskStatus;
   priority: TaskPriority;
   assigneeId: number;
-  assigneeName?: string;
   creatorId: number;
-  creatorName?: string;
   dueDate?: string;
   createdAt?: string;
   updatedAt?: string;
 }
 
-export interface TaskDetail extends TaskListItem {}
+export interface TaskResponse extends TaskListItemResponse {
+  description?: string;
+}
 
 export interface TaskQuery {
   status?: TaskStatus;
@@ -27,7 +26,7 @@ export interface TaskQuery {
   size?: number;
 }
 
-export interface TaskFormPayload {
+export interface CreateTaskPayload {
   title: string;
   description?: string;
   status?: TaskStatus;
@@ -36,8 +35,17 @@ export interface TaskFormPayload {
   dueDate?: string;
 }
 
+export interface UpdateTaskPayload {
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  assigneeId: number;
+  dueDate?: string;
+}
+
 export interface UpdateTaskStatusPayload {
   status: TaskStatus;
 }
 
-export type TaskPage = PageResponse<TaskListItem>;
+export type TaskPage = PageResponse<TaskListItemResponse>;

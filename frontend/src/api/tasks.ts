@@ -1,20 +1,27 @@
 import { http, unwrap } from './http';
-import type { TaskDetail, TaskFormPayload, TaskPage, TaskQuery, UpdateTaskStatusPayload } from '@/types/task';
+import type {
+  CreateTaskPayload,
+  TaskPage,
+  TaskQuery,
+  TaskResponse,
+  UpdateTaskPayload,
+  UpdateTaskStatusPayload,
+} from '@/types/task';
 
-export function fetchTasks(params: TaskQuery) {
+export function fetchTasks(params: TaskQuery = {}) {
   return unwrap<TaskPage>(http.get('/tasks', { params }));
 }
 
 export function fetchTask(id: number) {
-  return unwrap<TaskDetail>(http.get(`/tasks/${id}`));
+  return unwrap<TaskResponse>(http.get(`/tasks/${id}`));
 }
 
-export function createTask(payload: TaskFormPayload) {
-  return unwrap<TaskDetail>(http.post('/tasks', payload));
+export function createTask(payload: CreateTaskPayload) {
+  return unwrap<TaskResponse>(http.post('/tasks', payload));
 }
 
-export function updateTask(id: number, payload: TaskFormPayload) {
-  return unwrap<TaskDetail>(http.put(`/tasks/${id}`, payload));
+export function updateTask(id: number, payload: UpdateTaskPayload) {
+  return unwrap<TaskResponse>(http.put(`/tasks/${id}`, payload));
 }
 
 export function deleteTask(id: number) {
@@ -22,7 +29,7 @@ export function deleteTask(id: number) {
 }
 
 export function updateTaskStatus(id: number, payload: UpdateTaskStatusPayload) {
-  return unwrap<TaskDetail>(http.patch(`/tasks/${id}/status`, payload));
+  return unwrap<TaskResponse>(http.patch(`/tasks/${id}/status`, payload));
 }
 
 export function exportTasks(params: TaskQuery) {
