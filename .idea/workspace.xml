@@ -5,9 +5,13 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="32b77527-d88e-456a-bf5c-0ca6e04e3d46" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/api/news.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/api/news.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/types/news.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/types/news.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/views/NewsView.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/views/NewsView.vue" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/views/TasksView.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/views/TasksView.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tasks/filter-search.md" beforeDir="false" afterPath="$PROJECT_DIR$/tasks/filter-search.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tasks/status-flow.md" beforeDir="false" afterPath="$PROJECT_DIR$/tasks/status-flow.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tasks/news.md" beforeDir="false" afterPath="$PROJECT_DIR$/tasks/news.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tasks/task-news.md" beforeDir="false" afterPath="$PROJECT_DIR$/tasks/task-news.md" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -78,7 +82,7 @@
       <workItem from="1782205193194" duration="14582000" />
       <workItem from="1782229151400" duration="739000" />
       <workItem from="1782230570025" duration="52000" />
-      <workItem from="1782286795116" duration="4741000" />
+      <workItem from="1782286795116" duration="6764000" />
     </task>
     <task id="LOCAL-00001" summary="实现状态流转模块">
       <option name="closed" value="true" />
@@ -152,7 +156,15 @@
       <option name="project" value="LOCAL" />
       <updated>1782305502174</updated>
     </task>
-    <option name="localTasksCounter" value="10" />
+    <task id="LOCAL-00010" summary="前端筛选搜索与状态流转">
+      <option name="closed" value="true" />
+      <created>1782307147177</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1782307147177</updated>
+    </task>
+    <option name="localTasksCounter" value="11" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -167,6 +179,7 @@
     <MESSAGE value="搭建前端工程" />
     <MESSAGE value="实现前端登录鉴权" />
     <MESSAGE value="实现任务列表CRUD前端" />
-    <option name="LAST_COMMIT_MESSAGE" value="实现任务列表CRUD前端" />
+    <MESSAGE value="前端筛选搜索与状态流转" />
+    <option name="LAST_COMMIT_MESSAGE" value="前端筛选搜索与状态流转" />
   </component>
 </project>

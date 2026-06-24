@@ -2,10 +2,12 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Delete, Edit, Grid, List, Plus, Refresh, Right, Search, Select, View } from '@element-plus/icons-vue';
+import { Delete, Edit, Grid, Link, List, Plus, Refresh, Right, Search, Select, View } from '@element-plus/icons-vue';
+import { fetchTaskNews, refreshTaskNews } from '@/api/news';
 import { createTask, deleteTask, fetchTask, fetchTasks, updateTask, updateTaskStatus } from '@/api/tasks';
 import { useAuthStore } from '@/stores/auth';
 import type { TaskPriority, TaskStatus } from '@/types/api';
+import type { TaskNewsResponse } from '@/types/news';
 import type { TaskListItemResponse, TaskQuery, TaskResponse } from '@/types/task';
 import { priorityLabels, priorityTagTypes, statusLabels, statusTagTypes } from '@/utils/labels';
 
@@ -43,6 +45,11 @@ const dialogVisible = ref(false);
 const dialogMode = ref<DialogMode>('create');
 const currentTaskId = ref<number | null>(null);
 const formRef = ref<FormInstance>();
+const relatedNews = ref<TaskNewsResponse[]>([]);
+const relatedNewsLoading = ref(false);
+const relatedNewsRefreshing = ref(false);
+const relatedNewsError = ref('');
+const relatedNewsKeyword = ref('');
 
 const form = reactive<TaskFormState>({
   title: '',
@@ -93,6 +100,7 @@ const canCreate = computed(() => auth.isMentor);
 const canDelete = computed(() => auth.isMentor);
 const dialogTitle = computed(() => (dialogMode.value === 'create' ? '新增任务' : '任务详情 / 编辑'));
 const emptyText = computed(() => (loadError.value ? '任务加载失败' : '暂无任务'));
+const relatedNewsEmptyText = computed(() => (relatedNewsError.value ? '关联资讯加载失败' : '暂无关联资讯'));
 const canUpdateCurrentTaskStatus = computed(
   () => dialogMode.value === 'edit' && currentTaskId.value !== null && canUpdateStatus({ assigneeId: form.assigneeId }),
 );
@@ -106,6 +114,25 @@ function formatUserId(id: number) {
 
 function normalizeDate(value?: string) {
   return value || '未设置';
+}
+
+function formatNewsDate(value?: string) {
+  if (!value) {
+    return '未发布';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
 }
 
 function statusLabel(status: TaskStatus) {
@@ -190,6 +217,14 @@ function buildTaskQuery(): TaskQuery {
   return query;
 }
 
+function resetRelatedNews() {
+  relatedNews.value = [];
+  relatedNewsError.value = '';
+  relatedNewsKeyword.value = '';
+  relatedNewsLoading.value = false;
+  relatedNewsRefreshing.value = false;
+}
+
 function resetForm() {
   form.title = '';
   form.description = '';
@@ -198,6 +233,7 @@ function resetForm() {
   form.dueDate = '';
   form.status = 'TODO';
   currentTaskId.value = null;
+  resetRelatedNews();
   formRef.value?.clearValidate();
 }
 
@@ -209,6 +245,61 @@ function applyTaskToForm(task: TaskResponse) {
   form.dueDate = task.dueDate || '';
   form.status = task.status;
   currentTaskId.value = task.id;
+}
+
+async function loadRelatedNews(taskId: number) {
+  relatedNewsLoading.value = true;
+  relatedNewsError.value = '';
+  try {
+    relatedNews.value = await fetchTaskNews(taskId);
+  } catch (error) {
+    relatedNewsError.value = error instanceof Error ? error.message : '关联资讯加载失败';
+    ElMessage.warning(`资讯加载失败：${relatedNewsError.value}`);
+  } finally {
+    relatedNewsLoading.value = false;
+  }
+}
+
+async function refreshRelatedNews(keyword?: string) {
+  if (currentTaskId.value === null || relatedNewsRefreshing.value) {
+    return;
+  }
+
+  const normalizedKeyword = keyword?.trim();
+  relatedNewsRefreshing.value = true;
+  relatedNewsError.value = '';
+  try {
+    const response = await refreshTaskNews(
+      currentTaskId.value,
+      normalizedKeyword ? { keyword: normalizedKeyword } : {},
+    );
+    relatedNews.value = response.records;
+    if (!response.refreshSucceeded) {
+      const message = response.message || '资讯刷新失败，已保留可用缓存';
+      relatedNewsError.value = message;
+      ElMessage.warning(`资讯提示：${message}`);
+      return;
+    }
+    ElMessage.success(response.message || `已关联 ${response.records.length} 条资讯`);
+  } catch (error) {
+    relatedNewsError.value = error instanceof Error ? error.message : '关联资讯刷新失败';
+    ElMessage.error(`资讯刷新失败：${relatedNewsError.value}`);
+  } finally {
+    relatedNewsRefreshing.value = false;
+  }
+}
+
+function refreshRelatedNewsByTitle() {
+  refreshRelatedNews();
+}
+
+function refreshRelatedNewsByKeyword() {
+  const keyword = relatedNewsKeyword.value.trim();
+  if (!keyword) {
+    ElMessage.warning('请输入关键词后再刷新关联资讯');
+    return;
+  }
+  refreshRelatedNews(keyword);
 }
 
 async function loadTasks() {
@@ -256,7 +347,9 @@ async function openEditDialog(task: TaskListItemResponse) {
   resetForm();
   detailLoading.value = true;
   try {
-    applyTaskToForm(await fetchTask(task.id));
+    const taskDetail = await fetchTask(task.id);
+    applyTaskToForm(taskDetail);
+    void loadRelatedNews(taskDetail.id);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '任务详情加载失败');
     dialogVisible.value = false;
@@ -616,83 +709,161 @@ onMounted(loadTasks);
       </div>
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="680px" destroy-on-close>
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="min(1040px, calc(100vw - 32px))" destroy-on-close>
       <div v-loading="detailLoading" class="dialog-body">
-        <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
-          <el-form-item label="标题" prop="title">
-            <el-input v-model="form.title" maxlength="128" show-word-limit placeholder="请输入任务标题" />
-          </el-form-item>
-          <el-form-item label="描述" prop="description">
-            <el-input
-              v-model="form.description"
-              type="textarea"
-              :rows="4"
-              maxlength="2000"
-              show-word-limit
-              placeholder="请输入任务描述"
-            />
-          </el-form-item>
-          <div class="form-grid">
-            <el-form-item label="负责人 ID" prop="assigneeId">
-              <el-input-number
-                v-model="form.assigneeId"
-                :min="1"
-                :precision="0"
-                :disabled="!auth.isMentor"
-                controls-position="right"
-              />
-            </el-form-item>
-            <el-form-item label="优先级" prop="priority">
-              <el-select v-model="form.priority">
-                <el-option
-                  v-for="option in priorityOptions"
-                  :key="option.value"
-                  :label="option.label"
-                  :value="option.value"
+        <div class="dialog-grid" :class="{ 'single-pane': dialogMode === 'create' }">
+          <div class="task-form-pane">
+            <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
+              <el-form-item label="标题" prop="title">
+                <el-input v-model="form.title" maxlength="128" show-word-limit placeholder="请输入任务标题" />
+              </el-form-item>
+              <el-form-item label="描述" prop="description">
+                <el-input
+                  v-model="form.description"
+                  type="textarea"
+                  :rows="4"
+                  maxlength="2000"
+                  show-word-limit
+                  placeholder="请输入任务描述"
                 />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="截止日期" prop="dueDate">
-              <el-date-picker
-                v-model="form.dueDate"
-                type="date"
-                value-format="YYYY-MM-DD"
-                placeholder="选择截止日期"
-                clearable
-              />
-            </el-form-item>
-            <el-form-item label="状态" prop="status">
-              <el-select v-model="form.status" :disabled="dialogMode === 'edit' && !canUpdateCurrentTaskStatus">
-                <el-option
-                  v-for="option in statusOptions"
-                  :key="option.value"
-                  :label="option.label"
-                  :value="option.value"
-                />
-              </el-select>
-            </el-form-item>
-          </div>
-        </el-form>
+              </el-form-item>
+              <div class="form-grid">
+                <el-form-item label="负责人 ID" prop="assigneeId">
+                  <el-input-number
+                    v-model="form.assigneeId"
+                    :min="1"
+                    :precision="0"
+                    :disabled="!auth.isMentor"
+                    controls-position="right"
+                  />
+                </el-form-item>
+                <el-form-item label="优先级" prop="priority">
+                  <el-select v-model="form.priority">
+                    <el-option
+                      v-for="option in priorityOptions"
+                      :key="option.value"
+                      :label="option.label"
+                      :value="option.value"
+                    />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="截止日期" prop="dueDate">
+                  <el-date-picker
+                    v-model="form.dueDate"
+                    type="date"
+                    value-format="YYYY-MM-DD"
+                    placeholder="选择截止日期"
+                    clearable
+                  />
+                </el-form-item>
+                <el-form-item label="状态" prop="status">
+                  <el-select v-model="form.status" :disabled="dialogMode === 'edit' && !canUpdateCurrentTaskStatus">
+                    <el-option
+                      v-for="option in statusOptions"
+                      :key="option.value"
+                      :label="option.label"
+                      :value="option.value"
+                    />
+                  </el-select>
+                </el-form-item>
+              </div>
+            </el-form>
 
-        <div v-if="dialogMode === 'edit'" class="status-flow-panel">
-          <div>
-            <span>当前状态</span>
-            <el-tag :type="statusTagType(form.status)" effect="light">
-              {{ statusLabel(form.status) }}
-            </el-tag>
+            <div v-if="dialogMode === 'edit'" class="status-flow-panel">
+              <div>
+                <span>当前状态</span>
+                <el-tag :type="statusTagType(form.status)" effect="light">
+                  {{ statusLabel(form.status) }}
+                </el-tag>
+              </div>
+              <el-button
+                v-if="nextStatus(form.status) && canUpdateCurrentTaskStatus"
+                type="primary"
+                plain
+                :icon="nextStatusButtonIcon(form.status)"
+                :loading="currentTaskId !== null && isStatusUpdating(currentTaskId)"
+                @click="changeCurrentTaskToNextStatus"
+              >
+                {{ nextStatusButtonText(form.status) }}
+              </el-button>
+              <span v-else-if="form.status === 'DONE'" class="done-text">已完成</span>
+              <span v-else class="muted-text">当前账号无权更新状态</span>
+            </div>
           </div>
-          <el-button
-            v-if="nextStatus(form.status) && canUpdateCurrentTaskStatus"
-            type="primary"
-            plain
-            :icon="nextStatusButtonIcon(form.status)"
-            :loading="currentTaskId !== null && isStatusUpdating(currentTaskId)"
-            @click="changeCurrentTaskToNextStatus"
-          >
-            {{ nextStatusButtonText(form.status) }}
-          </el-button>
-          <span v-else-if="form.status === 'DONE'" class="done-text">已完成</span>
-          <span v-else class="muted-text">当前账号无权更新状态</span>
+
+          <aside v-if="dialogMode === 'edit'" class="related-news-pane">
+            <div class="related-news-head">
+              <div>
+                <h3>关联资讯</h3>
+                <span>按任务标题或指定关键词刷新</span>
+              </div>
+              <el-button
+                :icon="Refresh"
+                :loading="relatedNewsRefreshing"
+                :disabled="relatedNewsLoading"
+                @click="refreshRelatedNewsByTitle"
+              >
+                按标题刷新
+              </el-button>
+            </div>
+
+            <div class="related-news-search">
+              <el-input
+                v-model="relatedNewsKeyword"
+                placeholder="手动关键词"
+                clearable
+                @keyup.enter="refreshRelatedNewsByKeyword"
+              />
+              <el-button
+                type="primary"
+                :icon="Search"
+                :loading="relatedNewsRefreshing"
+                :disabled="relatedNewsLoading"
+                @click="refreshRelatedNewsByKeyword"
+              >
+                刷新
+              </el-button>
+            </div>
+
+            <el-alert
+              v-if="relatedNewsError"
+              :title="relatedNewsError"
+              type="warning"
+              show-icon
+              :closable="false"
+            />
+
+            <div class="related-news-list" v-loading="relatedNewsLoading || relatedNewsRefreshing">
+              <template v-if="relatedNews.length">
+                <article v-for="item in relatedNews" :key="item.id" class="related-news-item">
+                  <a class="related-news-title" :href="item.url" target="_blank" rel="noopener noreferrer">
+                    {{ item.title }}
+                  </a>
+                  <div class="related-news-meta">
+                    <span>{{ item.source || '未知来源' }}</span>
+                    <span>{{ formatNewsDate(item.publishedAt) }}</span>
+                    <el-tag v-if="item.keyword" size="small" effect="plain">{{ item.keyword }}</el-tag>
+                  </div>
+                  <el-button
+                    class="related-news-link"
+                    text
+                    :icon="Link"
+                    tag="a"
+                    :href="item.url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    打开链接
+                  </el-button>
+                </article>
+              </template>
+
+              <div v-else class="related-news-empty">
+                <strong>{{ relatedNewsEmptyText }}</strong>
+                <p>{{ relatedNewsError ? '任务编辑可继续进行。' : '刷新后会在这里展示相关资讯。' }}</p>
+              </div>
+            </div>
+          </aside>
         </div>
       </div>
 
@@ -720,6 +891,7 @@ onMounted(loadTasks);
 .toolbar,
 .row-actions,
 .card-actions,
+.related-news-search,
 .dialog-footer {
   display: flex;
   align-items: center;
@@ -889,6 +1061,22 @@ onMounted(loadTasks);
   min-height: 240px;
 }
 
+.dialog-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.82fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.dialog-grid.single-pane {
+  grid-template-columns: 1fr;
+}
+
+.task-form-pane,
+.related-news-pane {
+  min-width: 0;
+}
+
 .status-flow-panel {
   display: flex;
   align-items: center;
@@ -929,6 +1117,103 @@ onMounted(loadTasks);
   justify-content: flex-end;
 }
 
+.related-news-pane {
+  display: flex;
+  min-height: 470px;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--tm-border);
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.related-news-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.related-news-head h3 {
+  margin: 0;
+  color: #101828;
+  font-size: 16px;
+  letter-spacing: 0;
+}
+
+.related-news-head span {
+  display: block;
+  margin-top: 4px;
+  color: var(--tm-muted);
+  font-size: 12px;
+}
+
+.related-news-search :deep(.el-input) {
+  min-width: 0;
+}
+
+.related-news-list {
+  display: flex;
+  min-height: 300px;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.related-news-item {
+  display: flex;
+  min-height: 126px;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--tm-border);
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.related-news-title {
+  color: #101828;
+  font-weight: 650;
+  line-height: 1.45;
+  transition: color 180ms ease;
+}
+
+.related-news-title:hover,
+.related-news-title:focus-visible {
+  color: var(--tm-primary);
+  outline: none;
+}
+
+.related-news-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--tm-muted);
+  font-size: 12px;
+}
+
+.related-news-link {
+  align-self: flex-start;
+  margin-top: auto;
+  padding-left: 0;
+}
+
+.related-news-empty {
+  display: grid;
+  min-height: 300px;
+  place-items: center;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  color: var(--tm-muted);
+  text-align: center;
+}
+
+.related-news-empty p {
+  margin: 8px 0 0;
+}
+
 @media (max-width: 1024px) {
   .filter-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -940,6 +1225,10 @@ onMounted(loadTasks);
 
   .task-card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dialog-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -966,6 +1255,16 @@ onMounted(loadTasks);
   .status-flow-panel {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .related-news-head,
+  .related-news-search {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .related-news-pane {
+    min-height: 420px;
   }
 }
 </style>
