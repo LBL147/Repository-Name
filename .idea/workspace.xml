@@ -6,9 +6,10 @@
   <component name="ChangeListManager">
     <list default="true" id="32b77527-d88e-456a-bf5c-0ca6e04e3d46" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/api/dashboard.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/api/dashboard.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/types/dashboard.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/types/dashboard.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/api/tasks.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/api/tasks.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/views/DashboardView.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/views/DashboardView.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/views/TasksView.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/views/TasksView.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tasks/excel-export.md" beforeDir="false" afterPath="$PROJECT_DIR$/tasks/excel-export.md" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -79,7 +80,7 @@
       <workItem from="1782205193194" duration="14582000" />
       <workItem from="1782229151400" duration="739000" />
       <workItem from="1782230570025" duration="52000" />
-      <workItem from="1782286795116" duration="7447000" />
+      <workItem from="1782286795116" duration="9188000" />
     </task>
     <task id="LOCAL-00001" summary="实现状态流转模块">
       <option name="closed" value="true" />
@@ -169,7 +170,15 @@
       <option name="project" value="LOCAL" />
       <updated>1782310630423</updated>
     </task>
-    <option name="localTasksCounter" value="12" />
+    <task id="LOCAL-00012" summary="前端仪表盘">
+      <option name="closed" value="true" />
+      <created>1782311550068</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1782311550068</updated>
+    </task>
+    <option name="localTasksCounter" value="13" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -186,6 +195,7 @@
     <MESSAGE value="实现任务列表CRUD前端" />
     <MESSAGE value="前端筛选搜索与状态流转" />
     <MESSAGE value="前端资讯与任务关联资讯" />
-    <option name="LAST_COMMIT_MESSAGE" value="前端资讯与任务关联资讯" />
+    <MESSAGE value="前端仪表盘" />
+    <option name="LAST_COMMIT_MESSAGE" value="前端仪表盘" />
   </component>
 </project>

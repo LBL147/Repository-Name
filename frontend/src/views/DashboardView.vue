@@ -64,13 +64,20 @@ const metricCards = computed(() => [
 const hasChartData = computed(() => statusChart.value.seriesData.some((item) => item.value > 0));
 
 function todayText() {
-  return new Date().toISOString().slice(0, 10);
+  return formatDateText(new Date());
 }
 
 function addDaysText(days: number) {
   const date = new Date();
   date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  return formatDateText(date);
+}
+
+function formatDateText(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function formatRate(value: number) {

@@ -1,3 +1,4 @@
+import type { AxiosResponse } from 'axios';
 import { http, unwrap } from './http';
 import type {
   CreateTaskPayload,
@@ -32,8 +33,8 @@ export function updateTaskStatus(id: number, payload: UpdateTaskStatusPayload) {
   return unwrap<TaskResponse>(http.patch(`/tasks/${id}/status`, payload));
 }
 
-export function exportTasks(params: TaskQuery) {
-  return http.get('/tasks/export', {
+export function exportTasks(params: TaskQuery): Promise<AxiosResponse<Blob>> {
+  return http.get<Blob>('/tasks/export', {
     params,
     responseType: 'blob',
   });

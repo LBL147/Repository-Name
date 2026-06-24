@@ -2,9 +2,9 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Delete, Edit, Grid, Link, List, Plus, Refresh, Right, Search, Select, View } from '@element-plus/icons-vue';
+import { Delete, Download, Edit, Grid, Link, List, Plus, Refresh, Right, Search, Select, View } from '@element-plus/icons-vue';
 import { fetchTaskNews, refreshTaskNews } from '@/api/news';
-import { createTask, deleteTask, fetchTask, fetchTasks, updateTask, updateTaskStatus } from '@/api/tasks';
+import { createTask, deleteTask, exportTasks, fetchTask, fetchTasks, updateTask, updateTaskStatus } from '@/api/tasks';
 import { useAuthStore } from '@/stores/auth';
 import type { TaskPriority, TaskStatus } from '@/types/api';
 import type { TaskNewsResponse } from '@/types/news';
@@ -32,6 +32,7 @@ interface TaskFilterState {
 
 const auth = useAuthStore();
 const loading = ref(false);
+const exporting = ref(false);
 const saving = ref(false);
 const detailLoading = ref(false);
 const loadError = ref('');
@@ -98,6 +99,7 @@ const priorityOptions: Array<{ label: string; value: TaskPriority }> = [
 
 const canCreate = computed(() => auth.isMentor);
 const canDelete = computed(() => auth.isMentor);
+const canExport = computed(() => auth.isAuthenticated);
 const dialogTitle = computed(() => (dialogMode.value === 'create' ? '新增任务' : '任务详情 / 编辑'));
 const emptyText = computed(() => (loadError.value ? '任务加载失败' : '暂无任务'));
 const relatedNewsEmptyText = computed(() => (relatedNewsError.value ? '关联资讯加载失败' : '暂无关联资讯'));
@@ -193,11 +195,8 @@ function setStatusUpdating(id: number, updating: boolean) {
   statusUpdatingIds.value = nextIds;
 }
 
-function buildTaskQuery(): TaskQuery {
-  const query: TaskQuery = {
-    page: currentPage.value,
-    size: pageSize.value,
-  };
+function buildTaskFilterQuery(): TaskQuery {
+  const query: TaskQuery = {};
 
   if (filters.status) {
     query.status = filters.status;
@@ -215,6 +214,78 @@ function buildTaskQuery(): TaskQuery {
   }
 
   return query;
+}
+
+function buildTaskQuery(): TaskQuery {
+  return {
+    ...buildTaskFilterQuery(),
+    page: currentPage.value,
+    size: pageSize.value,
+  };
+}
+
+function parseExportFilename(contentDisposition?: string) {
+  if (!contentDisposition) {
+    return 'tasks.xlsx';
+  }
+
+  const filenameStarMatch = contentDisposition.match(/filename\*=([^;]+)/i);
+  if (filenameStarMatch?.[1]) {
+    const rawValue = filenameStarMatch[1].trim().replace(/^"|"$/g, '');
+    const encodedName = rawValue.includes("''") ? rawValue.split("''").slice(1).join("''") : rawValue;
+    try {
+      const decodedName = decodeURIComponent(encodedName);
+      return decodedName || 'tasks.xlsx';
+    } catch {
+      return encodedName || 'tasks.xlsx';
+    }
+  }
+
+  const filenameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+  return filenameMatch?.[1]?.trim() || 'tasks.xlsx';
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = filename || 'tasks.xlsx';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+function getResponseHeader(headers: unknown, name: string) {
+  if (!headers || typeof headers !== 'object') {
+    return undefined;
+  }
+
+  const axiosHeaders = headers as Record<string, string | undefined> & {
+    get?: (headerName: string) => string | null | undefined;
+  };
+
+  return axiosHeaders.get?.(name) ?? axiosHeaders[name] ?? axiosHeaders[name.toLowerCase()];
+}
+
+async function resolveExportErrorMessage(error: unknown) {
+  const responseData = (error as { response?: { data?: unknown } })?.response?.data;
+  if (responseData instanceof Blob && responseData.type.includes('application/json')) {
+    try {
+      const payload = JSON.parse(await responseData.text()) as { message?: string };
+      if (payload.message) {
+        return payload.message;
+      }
+    } catch {
+      // Fall back to the generic message below.
+    }
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return '任务导出失败，请稍后重试';
 }
 
 function resetRelatedNews() {
@@ -314,6 +385,25 @@ async function loadTasks() {
     ElMessage.error(loadError.value);
   } finally {
     loading.value = false;
+  }
+}
+
+async function handleExport() {
+  if (!canExport.value || exporting.value) {
+    return;
+  }
+
+  exporting.value = true;
+  try {
+    const response = await exportTasks(buildTaskFilterQuery());
+    const filename = parseExportFilename(getResponseHeader(response.headers, 'content-disposition'));
+    downloadBlob(response.data, filename);
+    ElMessage.success('任务导出已开始下载');
+  } catch (error) {
+    const message = await resolveExportErrorMessage(error);
+    ElMessage.error(`导出失败：${message}`);
+  } finally {
+    exporting.value = false;
   }
 }
 
@@ -506,6 +596,9 @@ onMounted(loadTasks);
         <el-button :loading="loading" @click="loadTasks">
           <el-icon><Refresh /></el-icon>
           刷新
+        </el-button>
+        <el-button v-if="canExport" :icon="Download" :loading="exporting" @click="handleExport">
+          导出 Excel
         </el-button>
         <el-button v-if="canCreate" type="primary" @click="openCreateDialog">
           <el-icon><Plus /></el-icon>
