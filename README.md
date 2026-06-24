@@ -80,11 +80,20 @@ VITE_API_BASE_URL=http://localhost:8080/api
 
 ## 功能截图
 
-- 登录页：`docs/screenshots/01-login-page.png`
-- 任务列表：`docs/screenshots/02-task-list.png`
-- 任务弹窗含资讯：`docs/screenshots/03-task-dialog-news.png`
-- 仪表盘：`docs/screenshots/04-dashboard.png`
-- 导出入口：`docs/screenshots/05-export-entry.png`
+### 登录页
+![登录页](docs/screenshots/01-login-page.png)
+
+### 任务列表
+![任务列表](docs/screenshots/02-task-list.png)
+
+### 任务弹窗含资讯
+![任务弹窗含资讯](docs/screenshots/03-task-dialog-news.png)
+
+### 仪表盘
+![仪表盘](docs/screenshots/04-dashboard.png)
+
+### 导出入口
+![导出入口](docs/screenshots/05-export-entry.png)
 
 ## AI 工具使用说明
 
