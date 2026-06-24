@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
+import type { FormInstance, FormRules } from 'element-plus';
 import { Lock, User } from '@element-plus/icons-vue';
 import { useAuthStore } from '@/stores/auth';
 import type { UserRole } from '@/types/api';
@@ -9,12 +10,19 @@ import type { UserRole } from '@/types/api';
 const router = useRouter();
 const route = useRoute();
 const auth = useAuthStore();
+const formRef = ref<FormInstance>();
 const loading = ref(false);
+const errorMessage = ref('');
 
 const form = reactive({
   username: '',
   password: '',
 });
+
+const rules: FormRules<typeof form> = {
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+};
 
 async function afterLogin() {
   const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/tasks';
@@ -22,8 +30,10 @@ async function afterLogin() {
 }
 
 async function submitLogin() {
-  if (!form.username.trim() || !form.password.trim()) {
-    ElMessage.warning('请输入用户名和密码');
+  errorMessage.value = '';
+  try {
+    await formRef.value?.validate();
+  } catch {
     return;
   }
 
@@ -36,20 +46,23 @@ async function submitLogin() {
     ElMessage.success('登录成功');
     await afterLogin();
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '登录失败');
+    errorMessage.value = error instanceof Error ? error.message : '登录失败';
+    ElMessage.error(errorMessage.value);
   } finally {
     loading.value = false;
   }
 }
 
 async function submitMockLogin(role: UserRole) {
+  errorMessage.value = '';
   loading.value = true;
   try {
     await auth.signInMock({ role });
     ElMessage.success('登录成功');
     await afterLogin();
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : 'Mock 登录失败');
+    errorMessage.value = error instanceof Error ? error.message : 'Mock 登录失败';
+    ElMessage.error(errorMessage.value);
   } finally {
     loading.value = false;
   }
@@ -66,15 +79,17 @@ async function submitMockLogin(role: UserRole) {
 
     <section class="login-panel">
       <h2>登录</h2>
-      <el-form label-position="top" @submit.prevent>
-        <el-form-item label="用户名">
+      <el-alert v-if="errorMessage" class="login-error" type="error" :title="errorMessage" show-icon :closable="false" />
+
+      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent="submitLogin">
+        <el-form-item label="用户名" prop="username">
           <el-input v-model.trim="form.username" size="large" autocomplete="username">
             <template #prefix>
               <el-icon><User /></el-icon>
             </template>
           </el-input>
         </el-form-item>
-        <el-form-item label="密码">
+        <el-form-item label="密码" prop="password">
           <el-input
             v-model="form.password"
             size="large"
@@ -89,14 +104,14 @@ async function submitMockLogin(role: UserRole) {
           </el-input>
         </el-form-item>
 
-        <el-button class="primary-action" type="primary" size="large" :loading="loading" @click="submitLogin">
+        <el-button class="primary-action" type="primary" size="large" native-type="submit" :icon="Lock" :loading="loading">
           登录
         </el-button>
       </el-form>
 
       <div class="mock-actions">
-        <el-button :loading="loading" @click="submitMockLogin('MENTOR')">导师 Mock 登录</el-button>
-        <el-button :loading="loading" @click="submitMockLogin('INTERN')">实习生 Mock 登录</el-button>
+        <el-button :icon="User" :loading="loading" @click="submitMockLogin('MENTOR')">导师 Mock 登录</el-button>
+        <el-button :icon="User" :loading="loading" @click="submitMockLogin('INTERN')">实习生 Mock 登录</el-button>
       </div>
     </section>
   </main>
@@ -153,6 +168,10 @@ async function submitMockLogin(role: UserRole) {
   margin: 0 0 22px;
   color: #101828;
   font-size: 24px;
+}
+
+.login-error {
+  margin-bottom: 18px;
 }
 
 .primary-action {

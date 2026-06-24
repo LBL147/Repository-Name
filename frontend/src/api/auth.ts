@@ -13,6 +13,8 @@ export function register(payload: RegisterRequest) {
   return unwrap<AuthResponse>(http.post('/auth/register', payload));
 }
 
-export function fetchCurrentUser() {
+export function me() {
   return unwrap<User>(http.get('/auth/me'));
 }
+
+export const fetchCurrentUser = me;

@@ -22,12 +22,14 @@ function readStoredUser(): User | null {
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem(TOKEN_KEY));
   const user = ref<User | null>(readStoredUser());
+  const hasRestoredSession = ref(false);
   const isAuthenticated = computed(() => Boolean(token.value && user.value));
   const isMentor = computed(() => user.value?.role === 'MENTOR');
 
   function setSession(session: AuthResponse) {
     token.value = session.token;
     user.value = session.user;
+    hasRestoredSession.value = true;
     localStorage.setItem(TOKEN_KEY, session.token);
     localStorage.setItem(USER_KEY, JSON.stringify(session.user));
   }
@@ -35,6 +37,7 @@ export const useAuthStore = defineStore('auth', () => {
   function clearSession() {
     token.value = null;
     user.value = null;
+    hasRestoredSession.value = true;
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
   }
@@ -53,10 +56,18 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function restore() {
     if (!token.value) {
+      hasRestoredSession.value = true;
       return;
     }
-    user.value = await fetchCurrentUser();
-    localStorage.setItem(USER_KEY, JSON.stringify(user.value));
+    try {
+      user.value = await fetchCurrentUser();
+      localStorage.setItem(USER_KEY, JSON.stringify(user.value));
+    } catch (error) {
+      clearSession();
+      throw error;
+    } finally {
+      hasRestoredSession.value = true;
+    }
   }
 
   window.addEventListener('tm:unauthorized', clearSession);
@@ -64,6 +75,7 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     token,
     user,
+    hasRestoredSession,
     isAuthenticated,
     isMentor,
     setSession,

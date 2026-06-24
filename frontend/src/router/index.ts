@@ -43,10 +43,22 @@ const router = createRouter({
   ],
 });
 
+window.addEventListener('tm:unauthorized', () => {
+  const currentRoute = router.currentRoute.value;
+  if (currentRoute.name === 'login') {
+    return;
+  }
+
+  void router.push({
+    name: 'login',
+    query: { redirect: currentRoute.fullPath },
+  });
+});
+
 router.beforeEach(async (to) => {
   const auth = useAuthStore();
 
-  if (auth.token && !auth.user) {
+  if (auth.token && !auth.hasRestoredSession) {
     try {
       await auth.restore();
     } catch {
