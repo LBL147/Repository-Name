@@ -1,33 +1,42 @@
 package com.icinfo.taskmanagement.service.news;
 
+import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 @Component
 public class FallbackNewsFetcher implements NewsFetcher {
 
-    private final ExternalNewsSource primarySource;
+    private final List<ExternalNewsSource> sources;
 
-    private final ExternalNewsSource fallbackSource;
-
+    @Autowired
     public FallbackNewsFetcher(
-            @Qualifier("gdeltNewsSource") ExternalNewsSource primarySource,
-            @Qualifier("googleNewsRssSource") ExternalNewsSource fallbackSource
+            @Qualifier("domesticRssNewsSource") ExternalNewsSource domesticRssSource,
+            @Qualifier("gdeltNewsSource") ExternalNewsSource gdeltNewsSource,
+            @Qualifier("googleNewsRssSource") ExternalNewsSource googleNewsRssSource
     ) {
-        this.primarySource = primarySource;
-        this.fallbackSource = fallbackSource;
+        this(List.of(domesticRssSource, gdeltNewsSource, googleNewsRssSource));
+    }
+
+    public FallbackNewsFetcher(ExternalNewsSource primarySource, ExternalNewsSource fallbackSource) {
+        this(List.of(primarySource, fallbackSource));
+    }
+
+    FallbackNewsFetcher(List<ExternalNewsSource> sources) {
+        this.sources = sources;
     }
 
     @Override
     public NewsFetchResult fetch(String keyword) {
-        try {
-            return primarySource.fetch(keyword);
-        } catch (NewsFetchException primaryException) {
+        NewsFetchException lastException = null;
+        for (ExternalNewsSource source : sources) {
             try {
-                return fallbackSource.fetch(keyword);
-            } catch (NewsFetchException fallbackException) {
-                throw new NewsFetchException("External news sources are unavailable", fallbackException);
+                return source.fetch(keyword);
+            } catch (NewsFetchException exception) {
+                lastException = exception;
             }
         }
+        throw new NewsFetchException("External news sources are unavailable", lastException);
     }
 }

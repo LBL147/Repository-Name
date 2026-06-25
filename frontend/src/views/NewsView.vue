@@ -57,17 +57,23 @@ async function loadNews() {
     const page = await fetchNews(buildQuery());
     news.value = page.records;
     total.value = page.total;
+    return page;
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : '资讯加载失败';
     ElMessage.error(loadError.value);
+    return null;
   } finally {
     loading.value = false;
   }
 }
 
-function handleSearch() {
+async function handleSearch() {
   currentPage.value = 1;
-  loadNews();
+  const page = await loadNews();
+  const keyword = filters.keyword.trim();
+  if (keyword && page && page.records.length === 0) {
+    await handleRefresh();
+  }
 }
 
 async function handleRefresh() {

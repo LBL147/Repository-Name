@@ -45,15 +45,15 @@
 | 统计图表 | 使用 ECharts 展示完成率和状态分布 | 高 |
 | 截止日期提醒 | 前端标记临期/逾期任务，后端保存截止日期 | 中 |
 | 角色权限 | 导师查看全部，实习生仅查看自己 | 高 |
-| CSV 导出 | 后端生成 CSV，前端下载任务列表 | 中 |
+| Excel 导出 | 后端生成 Excel，前端下载任务列表 | 中 |
 
 ## 4. 技术选型
 
 | 层级 | 技术 | 选择理由 |
 | --- | --- | --- |
 | 后端 | Java 17 + Spring Boot 3.x | 符合题目要求，生态成熟，适合快速构建 RESTful API |
-| 持久层 | Spring Data JPA | 减少样板代码，适合 48 小时 MVP 快速开发 |
-| 数据库 | H2 开发环境 + MySQL 兼容脚本 | H2 便于本地演示，MySQL 脚本满足交付要求 |
+| 持久层 | MyBatis-Plus | 减少样板代码，便于快速实现分页、条件查询和权限过滤 |
+| 数据库 | MySQL 8.0 | 与交付 SQL 脚本一致，适合本地演示和后续部署 |
 | 认证 | JWT 或 Mock Token | 降低认证复杂度，同时保留前后端鉴权流程 |
 | 前端 | Vue3 + Vite + Composition API | 启动快、开发效率高，符合题目要求 |
 | UI | Element Plus | 表单、表格、弹窗、标签和布局组件完整 |
@@ -69,8 +69,8 @@ flowchart LR
     V --> A["Axios API Client"]
     A --> B["Spring Boot REST API"]
     B --> S["业务服务层"]
-    S --> R["JPA Repository"]
-    R --> D["H2/MySQL 数据库"]
+    S --> R["MyBatis-Plus Mapper"]
+    R --> D["MySQL 数据库"]
     S --> N["资讯服务"]
     N --> X["第三方 API/RSS"]
 ```
@@ -81,7 +81,7 @@ flowchart LR
 | --- | --- |
 | controller | REST 接口，参数校验，统一响应 |
 | service | 业务逻辑，权限判断，状态流转，资讯聚合 |
-| repository | 数据访问 |
+| mapper | MyBatis-Plus 数据访问 |
 | entity | 数据库实体 |
 | dto | 请求/响应对象 |
 | config | CORS、认证拦截、初始化配置 |
@@ -184,7 +184,7 @@ erDiagram
 | PUT | /api/tasks/{id} | 编辑任务 |
 | DELETE | /api/tasks/{id} | 删除任务 |
 | PATCH | /api/tasks/{id}/status | 更新任务状态 |
-| GET | /api/tasks/export | 导出任务 CSV |
+| GET | /api/tasks/export | 导出任务 Excel |
 
 ### 7.3 资讯接口
 
@@ -252,7 +252,7 @@ erDiagram
 | 阶段 3 | 12-20 小时 | 完成任务列表页、筛选、表格/卡片视图、编辑弹窗 |
 | 阶段 4 | 20-28 小时 | 完成状态流转、角色权限、优先级、截止日期提醒 |
 | 阶段 5 | 28-36 小时 | 完成实时资讯 API/RSS 获取、任务关联资讯、刷新和搜索 |
-| 阶段 6 | 36-42 小时 | 完成仪表盘统计、ECharts 图表、CSV 导出 |
+| 阶段 6 | 36-42 小时 | 完成仪表盘统计、ECharts 图表、Excel 导出 |
 | 阶段 7 | 42-48 小时 | 联调测试、补 README、SQL 脚本、设计文档和截图 |
 
 ## 11. 验收清单
@@ -295,7 +295,7 @@ erDiagram
 | 48 小时时间紧张 | 功能无法全部完成 | 先保证任务 CRUD、状态流转、资讯关联和核心页面 |
 | 权限逻辑遗漏 | 评审扣分 | 在 service 层统一判断角色和任务归属 |
 | 前后端字段不一致 | 联调失败 | 使用统一 DTO 和 TypeScript 类型，接口文档同步更新 |
-| 数据库环境差异 | 演示启动失败 | 默认使用 H2，额外提供 MySQL SQL 脚本 |
+| 数据库环境差异 | 演示启动失败 | 默认使用 MySQL，启动前按 README 执行 SQL 并检查 `DB_*` 配置 |
 
 ## 14. MVP 优先级
 
@@ -303,4 +303,4 @@ erDiagram
 
 第二优先级：角色权限、优先级、截止日期提醒、仪表盘统计。
 
-第三优先级：CSV 导出、注册页、拖拽状态切换、更多图表优化。
+第三优先级：Excel 导出、注册页、拖拽状态切换、更多图表优化。
