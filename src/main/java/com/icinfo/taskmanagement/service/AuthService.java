@@ -41,7 +41,7 @@ public class AuthService {
     public AuthResponse login(LoginRequest request) {
         User user = findByUsername(request.getUsername());
         if (user == null || !passwordHasher.matches(request.getPassword(), user.getPassword())) {
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "Invalid username or password");
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "用户名或密码错误");
         }
         return toAuthResponse(user);
     }
@@ -55,7 +55,7 @@ public class AuthService {
         }
 
         if (user == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "username or role is required");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "请选择登录身份或输入用户名");
         }
         return toAuthResponse(user);
     }
@@ -63,7 +63,7 @@ public class AuthService {
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         if (findByUsername(request.getUsername()) != null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Username already exists");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "用户名已存在");
         }
 
         User user = new User();
@@ -76,7 +76,7 @@ public class AuthService {
         try {
             userMapper.insert(user);
         } catch (DuplicateKeyException exception) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Username already exists");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "用户名已存在");
         }
 
         return toAuthResponse(user);
@@ -85,7 +85,7 @@ public class AuthService {
     public UserResponse getCurrentUser(CurrentUser currentUser) {
         User user = userMapper.selectById(currentUser.getId());
         if (user == null) {
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "Current user no longer exists");
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "当前用户不存在，请重新登录");
         }
         return UserResponse.from(user);
     }

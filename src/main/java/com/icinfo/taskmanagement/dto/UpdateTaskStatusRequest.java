@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotNull;
 
 public class UpdateTaskStatusRequest {
 
-    @NotNull
+    @NotNull(message = "请选择状态")
     private TaskStatus status;
 
     public TaskStatus getStatus() {

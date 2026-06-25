@@ -15,6 +15,7 @@ import com.icinfo.taskmanagement.entity.Task;
 import com.icinfo.taskmanagement.entity.TaskPriority;
 import com.icinfo.taskmanagement.entity.TaskStatus;
 import com.icinfo.taskmanagement.entity.User;
+import com.icinfo.taskmanagement.entity.UserRole;
 import com.icinfo.taskmanagement.exception.BusinessException;
 import com.icinfo.taskmanagement.mapper.TaskMapper;
 import com.icinfo.taskmanagement.mapper.UserMapper;
@@ -66,7 +67,7 @@ public class TaskService {
     public TaskResponse createTask(CreateTaskRequest request) {
         CurrentUser currentUser = CurrentUserContext.get();
         requireMentor(currentUser);
-        validateUserExists(request.getAssigneeId(), "Assignee does not exist");
+        validateInternAssignee(request.getAssigneeId());
 
         LocalDateTime now = LocalDateTime.now();
         Task task = new Task();
@@ -103,7 +104,7 @@ public class TaskService {
         CurrentUser currentUser = CurrentUserContext.get();
         Task task = findTask(id);
         requireEditable(currentUser, task);
-        validateUserExists(request.getAssigneeId(), "Assignee does not exist");
+        validateInternAssignee(request.getAssigneeId());
 
         if (!isMentor(currentUser) && !currentUser.getId().equals(request.getAssigneeId())) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
@@ -198,10 +199,10 @@ public class TaskService {
         return Math.min(size, 100L);
     }
 
-    private void validateUserExists(Long userId, String message) {
+    private void validateInternAssignee(Long userId) {
         User user = userMapper.selectById(userId);
-        if (user == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, message);
+        if (user == null || user.getRole() != UserRole.INTERN) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "负责人必须是有效实习生");
         }
     }
 

@@ -153,7 +153,7 @@ public class NewsService {
     private String normalizeRequiredKeyword(String keyword) {
         String normalized = normalizeKeyword(keyword);
         if (normalized == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "keyword must not be blank");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "关键词不能为空");
         }
         return normalized;
     }
@@ -182,7 +182,7 @@ public class NewsService {
 
     private String normalizeSource(String source) {
         if (isBlank(source)) {
-            return "Unknown";
+            return "未知来源";
         }
         return source.trim();
     }
@@ -203,7 +203,7 @@ public class NewsService {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 is not available", exception);
+            throw new IllegalStateException("SHA-256 不可用", exception);
         }
     }
 }

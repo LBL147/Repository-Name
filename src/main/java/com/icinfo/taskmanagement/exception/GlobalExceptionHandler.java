@@ -25,7 +25,7 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleMethodArgumentNotValidException(MethodArgumentNotValidException exception) {
         String message = exception.getBindingResult().getFieldErrors().stream()
-                .map(error -> error.getField() + " " + error.getDefaultMessage())
+                .map(error -> error.getDefaultMessage())
                 .collect(Collectors.joining("; "));
         return ApiResponse.failure(ErrorCode.BAD_REQUEST, message);
     }
@@ -34,7 +34,7 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleBindException(BindException exception) {
         String message = exception.getBindingResult().getFieldErrors().stream()
-                .map(error -> error.getField() + " " + error.getDefaultMessage())
+                .map(error -> error.getDefaultMessage())
                 .collect(Collectors.joining("; "));
         return ApiResponse.failure(ErrorCode.BAD_REQUEST, message);
     }
@@ -51,7 +51,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleHttpMessageNotReadableException(HttpMessageNotReadableException exception) {
-        return ApiResponse.failure(ErrorCode.BAD_REQUEST, "Invalid request body");
+        return ApiResponse.failure(ErrorCode.BAD_REQUEST, "请求体格式不正确");
     }
 
     @ExceptionHandler(Exception.class)

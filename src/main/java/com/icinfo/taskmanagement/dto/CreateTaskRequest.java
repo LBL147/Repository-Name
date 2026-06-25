@@ -9,18 +9,18 @@ import java.time.LocalDate;
 
 public class CreateTaskRequest {
 
-    @NotBlank
-    @Size(max = 128)
+    @NotBlank(message = "请输入任务标题")
+    @Size(max = 128, message = "标题不能超过 128 个字符")
     private String title;
 
-    @Size(max = 2000)
+    @Size(max = 2000, message = "描述不能超过 2000 个字符")
     private String description;
 
     private TaskStatus status;
 
     private TaskPriority priority;
 
-    @NotNull
+    @NotNull(message = "请选择负责人")
     private Long assigneeId;
 
     private LocalDate dueDate;

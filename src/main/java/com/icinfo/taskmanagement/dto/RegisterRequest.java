@@ -7,19 +7,19 @@ import jakarta.validation.constraints.Size;
 
 public class RegisterRequest {
 
-    @NotBlank
-    @Size(max = 64)
+    @NotBlank(message = "请输入用户名")
+    @Size(max = 64, message = "用户名不能超过 64 个字符")
     private String username;
 
-    @NotBlank
-    @Size(min = 6, max = 128)
+    @NotBlank(message = "请输入密码")
+    @Size(min = 6, max = 128, message = "密码长度需为 6 到 128 个字符")
     private String password;
 
-    @NotBlank
-    @Size(max = 64)
+    @NotBlank(message = "请输入姓名")
+    @Size(max = 64, message = "姓名不能超过 64 个字符")
     private String displayName;
 
-    @NotNull
+    @NotNull(message = "请选择角色")
     private UserRole role;
 
     public String getUsername() {

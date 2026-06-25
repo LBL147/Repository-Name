@@ -12,6 +12,7 @@ import {
 import { fetchTasks } from '@/api/tasks';
 import MetricCard from '@/components/MetricCard.vue';
 import { useAuthStore } from '@/stores/auth';
+import { useUserDirectoryStore } from '@/stores/userDirectory';
 import type { TaskStatus } from '@/types/api';
 import type { DashboardStatusChartResponse, DashboardSummaryResponse } from '@/types/dashboard';
 import type { TaskListItemResponse } from '@/types/task';
@@ -37,6 +38,7 @@ const statusColors: Record<TaskStatus, string> = {
 };
 
 const auth = useAuthStore();
+const userDirectory = useUserDirectoryStore();
 const loading = ref(false);
 const reminderLoading = ref(false);
 const loadError = ref('');
@@ -95,11 +97,19 @@ function priorityLabel(priority: TaskListItemResponse['priority']) {
   return priorityLabels[priority];
 }
 
-function formatUserId(id: number) {
-  if (auth.user?.id === id) {
-    return `${auth.user.displayName || auth.user.username}（ID ${id}）`;
+function assigneeName(id?: number) {
+  if (id !== undefined && auth.user?.id === id && !userDirectory.loaded) {
+    return auth.user.displayName || auth.user.username;
   }
-  return `用户 ID ${id}`;
+  return userDirectory.assigneeName(id);
+}
+
+async function loadInternDirectory() {
+  try {
+    await userDirectory.loadInterns();
+  } catch {
+    ElMessage.warning('负责人列表加载失败，任务仍可查看');
+  }
 }
 
 function formatDueDate(value?: string) {
@@ -276,7 +286,7 @@ watch(
 );
 
 onMounted(async () => {
-  await loadDashboard();
+  await Promise.all([loadInternDirectory(), loadDashboard()]);
   if (chartRef.value) {
     chartResizeObserver = new ResizeObserver(resizeChart);
     chartResizeObserver.observe(chartRef.value);
@@ -342,7 +352,7 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="reminder-meta">
                   <span>{{ formatDueDate(task.dueDate) }}</span>
-                  <span>{{ formatUserId(task.assigneeId) }}</span>
+                  <span>{{ assigneeName(task.assigneeId) }}</span>
                 </div>
                 <div class="reminder-tags">
                   <el-tag :type="statusTagTypes[task.status]" effect="light">{{ statusLabel(task.status) }}</el-tag>
@@ -362,7 +372,7 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="reminder-meta">
                   <span>{{ formatDueDate(task.dueDate) }}</span>
-                  <span>{{ formatUserId(task.assigneeId) }}</span>
+                  <span>{{ assigneeName(task.assigneeId) }}</span>
                 </div>
                 <div class="reminder-tags">
                   <el-tag :type="statusTagTypes[task.status]" effect="light">{{ statusLabel(task.status) }}</el-tag>

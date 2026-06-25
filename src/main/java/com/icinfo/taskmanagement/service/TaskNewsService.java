@@ -99,7 +99,7 @@ public class TaskNewsService {
         }
         String taskTitle = normalizeKeyword(task.getTitle());
         if (taskTitle == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "task title must not be blank");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "任务标题不能为空");
         }
         return taskTitle;
     }

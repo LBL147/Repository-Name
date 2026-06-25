@@ -6,6 +6,7 @@ import { Delete, Download, Edit, Grid, Link, List, Plus, Refresh, Right, Search,
 import { fetchTaskNews, refreshTaskNews } from '@/api/news';
 import { createTask, deleteTask, exportTasks, fetchTask, fetchTasks, updateTask, updateTaskStatus } from '@/api/tasks';
 import { useAuthStore } from '@/stores/auth';
+import { useUserDirectoryStore } from '@/stores/userDirectory';
 import type { TaskPriority, TaskStatus } from '@/types/api';
 import type { TaskNewsResponse } from '@/types/news';
 import type { TaskListItemResponse, TaskQuery, TaskResponse } from '@/types/task';
@@ -31,6 +32,7 @@ interface TaskFilterState {
 }
 
 const auth = useAuthStore();
+const userDirectory = useUserDirectoryStore();
 const loading = ref(false);
 const exporting = ref(false);
 const saving = ref(false);
@@ -75,7 +77,7 @@ const rules: FormRules<TaskFormState> = {
     { max: 128, message: '标题不能超过 128 个字符', trigger: 'blur' },
   ],
   description: [{ max: 2000, message: '描述不能超过 2000 个字符', trigger: 'blur' }],
-  assigneeId: [{ required: true, message: '请输入负责人 ID', trigger: 'blur' }],
+  assigneeId: [{ required: true, message: '请选择负责人', trigger: 'change' }],
   priority: [{ required: true, message: '请选择优先级', trigger: 'change' }],
   status: [{ required: true, message: '请选择状态', trigger: 'change' }],
 };
@@ -100,6 +102,7 @@ const priorityOptions: Array<{ label: string; value: TaskPriority }> = [
 const canCreate = computed(() => auth.isMentor);
 const canDelete = computed(() => auth.isMentor);
 const canExport = computed(() => auth.isAuthenticated);
+const assigneeOptions = computed(() => userDirectory.assigneeOptions);
 const dialogTitle = computed(() => (dialogMode.value === 'create' ? '新增任务' : '任务详情 / 编辑'));
 const emptyText = computed(() => (loadError.value ? '任务加载失败' : '暂无任务'));
 const relatedNewsEmptyText = computed(() => (relatedNewsError.value ? '关联资讯加载失败' : '暂无关联资讯'));
@@ -107,11 +110,27 @@ const canUpdateCurrentTaskStatus = computed(
   () => dialogMode.value === 'edit' && currentTaskId.value !== null && canUpdateStatus({ assigneeId: form.assigneeId }),
 );
 
-function formatUserId(id: number) {
-  if (auth.user?.id === id) {
-    return `${auth.user.displayName || auth.user.username}（ID ${id}）`;
+function assigneeName(id?: number) {
+  if (id !== undefined && auth.user?.id === id && !userDirectory.loaded) {
+    return auth.user.displayName || auth.user.username;
   }
-  return `用户 ID ${id}`;
+  return userDirectory.assigneeName(id);
+}
+
+async function loadInternDirectory(showWarning = false) {
+  try {
+    await userDirectory.loadInterns();
+  } catch {
+    if (showWarning) {
+      ElMessage.warning('负责人列表加载失败，任务仍可查看');
+    }
+  }
+}
+
+function loadInternDirectoryOnOpen(visible: boolean) {
+  if (visible) {
+    void loadInternDirectory(true);
+  }
 }
 
 function normalizeDate(value?: string) {
@@ -582,7 +601,9 @@ function handleSizeChange(size: number) {
   loadTasks();
 }
 
-onMounted(loadTasks);
+onMounted(async () => {
+  await Promise.all([loadInternDirectory(true), loadTasks()]);
+});
 </script>
 
 <template>
@@ -619,15 +640,27 @@ onMounted(loadTasks);
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="负责人 ID">
-          <el-input-number
+        <el-form-item label="负责人">
+          <el-select
             v-model="filters.assigneeId"
-            :min="1"
-            :precision="0"
+            :loading="userDirectory.loading"
             clearable
-            controls-position="right"
             placeholder="全部负责人"
-          />
+            filterable
+            @visible-change="loadInternDirectoryOnOpen"
+          >
+            <el-option
+              v-for="option in assigneeOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            >
+              <div class="assignee-option">
+                <span>{{ option.label }}</span>
+                <small v-if="option.showUsername">{{ option.username }}</small>
+              </div>
+            </el-option>
+          </el-select>
         </el-form-item>
         <el-form-item label="截止日期">
           <el-date-picker
@@ -697,7 +730,7 @@ onMounted(loadTasks);
           </el-table-column>
           <el-table-column label="负责人" width="160">
             <template #default="{ row }">
-              {{ formatUserId(row.assigneeId) }}
+              {{ assigneeName(row.assigneeId) }}
             </template>
           </el-table-column>
           <el-table-column label="截止日期" width="140">
@@ -753,7 +786,7 @@ onMounted(loadTasks);
             </div>
             <div class="card-meta">
               <span>负责人</span>
-              <strong>{{ formatUserId(task.assigneeId) }}</strong>
+              <strong>{{ assigneeName(task.assigneeId) }}</strong>
             </div>
             <div class="card-meta">
               <span>截止日期</span>
@@ -821,14 +854,27 @@ onMounted(loadTasks);
                 />
               </el-form-item>
               <div class="form-grid">
-                <el-form-item label="负责人 ID" prop="assigneeId">
-                  <el-input-number
+                <el-form-item label="负责人" prop="assigneeId">
+                  <el-select
                     v-model="form.assigneeId"
-                    :min="1"
-                    :precision="0"
+                    :loading="userDirectory.loading"
                     :disabled="!auth.isMentor"
-                    controls-position="right"
-                  />
+                    filterable
+                    placeholder="请选择实习生"
+                    @visible-change="loadInternDirectoryOnOpen"
+                  >
+                    <el-option
+                      v-for="option in assigneeOptions"
+                      :key="option.value"
+                      :label="option.label"
+                      :value="option.value"
+                    >
+                      <div class="assignee-option">
+                        <span>{{ option.label }}</span>
+                        <small v-if="option.showUsername">{{ option.username }}</small>
+                      </div>
+                    </el-option>
+                  </el-select>
                 </el-form-item>
                 <el-form-item label="优先级" prop="priority">
                   <el-select v-model="form.priority">
@@ -1075,6 +1121,18 @@ onMounted(loadTasks);
 
 .row-actions {
   flex-wrap: wrap;
+}
+
+.assignee-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.assignee-option small {
+  color: var(--tm-muted);
+  font-size: 12px;
 }
 
 .task-card-grid {

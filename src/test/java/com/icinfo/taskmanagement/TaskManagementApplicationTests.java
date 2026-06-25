@@ -1,6 +1,7 @@
 package com.icinfo.taskmanagement;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -243,6 +244,29 @@ class TaskManagementApplicationTests {
     }
 
     @Test
+    void mentorCanListInternsByNameWithoutMentors() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+
+        mockMvc.perform(get("/api/users/interns")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].displayName").value("Mock Intern"))
+                .andExpect(jsonPath("$.data[0].role").value("INTERN"))
+                .andExpect(jsonPath("$.data[1].displayName").value("Other Intern"))
+                .andExpect(jsonPath("$.data[1].role").value("INTERN"));
+    }
+
+    @Test
+    void internsListRequiresLoginWithChineseMessage() throws Exception {
+        mockMvc.perform(get("/api/users/interns"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(401))
+                .andExpect(jsonPath("$.message").value("登录状态已失效，请重新登录"));
+    }
+
+    @Test
     void mentorCanCreateReadUpdateAndDeleteTask() throws Exception {
         String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
         Long internId = userId("intern_mock");
@@ -302,6 +326,61 @@ class TaskManagementApplicationTests {
                         .header("Authorization", "Bearer " + mentorToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(404));
+    }
+
+    @Test
+    void mentorCannotAssignTaskToUnknownUserOrMentor() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+        Long mentorId = userId("mentor_mock");
+        Long internId = userId("intern_mock");
+        Long taskId = createTaskRow("Invalid assignee update", internId, mentorId);
+
+        mockMvc.perform(post("/api/tasks")
+                        .header("Authorization", "Bearer " + mentorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Invalid assignee create",
+                                  "assigneeId": 999999
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("负责人必须是有效实习生"));
+
+        mockMvc.perform(put("/api/tasks/{id}", taskId)
+                        .header("Authorization", "Bearer " + mentorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Invalid assignee update",
+                                  "status": "TODO",
+                                  "priority": "MEDIUM",
+                                  "assigneeId": %d
+                                }
+                                """.formatted(mentorId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("负责人必须是有效实习生"));
+    }
+
+    @Test
+    void taskValidationMessagesAreChinese() throws Exception {
+        String mentorToken = loginAndExtractToken("mentor_mock", "mentor123");
+
+        mockMvc.perform(post("/api/tasks")
+                        .header("Authorization", "Bearer " + mentorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "",
+                                  "assigneeId": null
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value(containsString("请输入任务标题")))
+                .andExpect(jsonPath("$.message").value(containsString("请选择负责人")));
     }
 
     @Test

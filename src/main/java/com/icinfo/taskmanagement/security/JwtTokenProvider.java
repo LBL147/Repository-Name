@@ -52,7 +52,7 @@ public class JwtTokenProvider {
             String role = claims.get("role", String.class);
             return new CurrentUser(id, username, role);
         } catch (RuntimeException exception) {
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "Invalid or expired token");
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已失效，请重新登录");
         }
     }
 
