@@ -364,3 +364,88 @@ npm.cmd run build
 3. 可关闭占用 Node/Vite 的进程后重试。
 4. 如果目录权限异常，可手动处理该临时目录；注意不要使用批量删除命令。
 5. 当前已通过 `vue-tsc --noEmit` 验证前端类型检查，业务改动点集中在 `frontend/src/views/NewsView.vue`。
+---
+
+# 负责人姓名选择与中文错误提示改造验证记录
+
+## 背景
+
+本轮实现了“负责人 ID 改为实习生姓名选择器”和“前后端错误提示中文化”：
+
+- 后端新增 `GET /api/users/interns`，用于返回全部实习生。
+- 任务创建/编辑仍提交 `assigneeId`，但前端只让用户按姓名选择负责人。
+- 后端将负责人校验改为“负责人必须是有效实习生”。
+- 后端常见业务错误、校验错误改为中文。
+- 前端 `http.unwrap` 增加旧英文错误与 Axios 通用错误的中文兜底。
+
+## 后端验证
+
+执行：
+
+```powershell
+mvn test
+```
+
+结果：
+
+```text
+Tests run: 49, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+```
+
+这说明当前 Maven/Java 环境可以正常编译并运行后端测试。项目仍应使用 JDK 17，与 `pom.xml` 中的 `java.version=17` 保持一致。
+
+本轮新增/覆盖的后端测试点包括：
+
+- 登录后访问 `GET /api/users/interns` 返回实习生列表，不返回导师。
+- 未登录访问实习生列表返回中文未授权提示。
+- 创建任务时负责人不存在，返回 `负责人必须是有效实习生`。
+- 编辑任务时负责人选择导师，返回 `负责人必须是有效实习生`。
+- 任务表单缺少标题/负责人时返回中文校验错误。
+
+## 前端构建验证
+
+第一次在沙箱内执行：
+
+```powershell
+npm.cmd run build -- --emptyOutDir=false
+```
+
+Vite 在写入临时配置文件时遇到权限错误：
+
+```text
+EPERM: operation not permitted, open 'frontend\node_modules\.vite-temp\vite.config.ts.timestamp-...mjs'
+```
+
+该错误发生在 Vite 写 `node_modules/.vite-temp` 阶段，不是 TypeScript 或业务代码错误。随后使用提升权限重跑同一命令：
+
+```powershell
+npm.cmd run build -- --emptyOutDir=false
+```
+
+结果：构建成功，仅保留 Vite/Rollup 关于大 chunk 和依赖注释的警告。
+
+使用 `--emptyOutDir=false` 是为了避免构建时清空 `dist` 目录，符合当前仓库“不批量删除文件或目录”的操作约束。
+
+## 真实联调说明
+
+本轮曾临时打开前端页面确认错误提示兜底，发现当后端未启动或代理返回 500 时，前端原本会显示英文：
+
+```text
+Request failed with status code 500
+```
+
+已补充中文兜底，当前显示为：
+
+```text
+服务异常，请稍后重试
+```
+
+用户随后明确说明“不用真实打开前后端测试，我自己来”。因此本轮停止继续真实前后端联调，并已结束先前启动的前端 dev server 进程树，避免占用 `5173` 端口。
+
+## 当前结论
+
+- 后端 Java 17 测试链路正常，`mvn test` 全部通过。
+- 前端类型检查与生产构建通过。
+- Vite 的 `.vite-temp` 权限问题属于当前执行环境权限限制；在允许写入该目录的环境或提升权限后构建可通过。
+- 后续本地验收时，仍建议使用 JDK 17 运行后端，并由用户自行启动前后端做界面联调。
